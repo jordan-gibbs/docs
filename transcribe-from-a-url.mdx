@@ -1,0 +1,107 @@
+---
+title: "Transcribe from a URL"
+description: "Transcribe your first audio file in minutes with Fennec API."
+---
+
+### Step 1: Get your API Key
+
+Your API key is used to authenticate your requests. Follow this link to grab your first API key.
+
+### Step 2: Prepare your first transcription
+
+Let's write a simple script to send a URL to the API.
+
+<AccordionGroup>
+
+  <Accordion icon="language" title="2. Create the Python script">
+    Create a new file named `quickstart-url.py`. Copy and paste the code below into it.
+
+    ```python quickstart-url.py
+import requests
+import json
+import time
+
+# --- Configuration ---
+BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+API_KEY = "sk_m6N4Di8diphMFvC1-Bkfp-uGhnMNMV1aQCUv8zOCni8"  # Your actual key
+AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
+POLL_INTERVAL_SECONDS = 3
+MAX_WAIT_SECONDS = 300
+
+# --- Request & Polling ---
+headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+payload = {"audio": AUDIO_URL, "context": "testing with a python script"}
+
+try:
+    # 1. Submit the job
+    print("Submitting transcription job...")
+    submit_response = requests.post(f"{BASE_URL}/transcribe/url", headers=headers, data=json.dumps(payload))
+    submit_response.raise_for_status()
+    job_info = submit_response.json()
+    job_id = job_info.get("job_id")
+    print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+
+    # 2. Poll for the result
+    start_time = time.time()
+    while time.time() - start_time < MAX_WAIT_SECONDS:
+        print("Polling for status...")
+        status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+        status_response = requests.get(status_url, headers=headers)
+
+        if status_response.status_code == 200:
+            status_data = status_response.json()
+            job_status = status_data.get("status")
+            print(f"  Current status: '{job_status}'")
+
+            if job_status == "completed":
+                print("\n🎉 Transcription complete!")
+                print("Transcript:", status_data.get("transcript"))
+                break
+            elif job_status == "failed":
+                print("\n❌ Transcription failed.")
+                print("Error:", status_data.get("transcript"))  # Assuming error is stored in transcript field
+                break
+        else:
+            print(f"  Error polling status: {status_response.status_code}")
+
+        time.sleep(POLL_INTERVAL_SECONDS)
+    else:
+        print("\n⏰ Polling timed out.")
+
+except requests.exceptions.RequestException as e:
+    print(f"An error occurred: {e}")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Step 3: Run it
+
+<Accordion icon="rocket" title="Run the script">
+  1.  Open your terminal in the directory containing `quickstart.py` and `sample.mp3`.
+  2.  Run the script:
+        ```bash
+        python quickstart-url.py
+        ```
+  3.  Watch as the script polls for the status and finally prints your transcript!
+
+</Accordion>
+
+## Next Steps
+
+Now that you've completed your first transcription, you can explore the API's more powerful features.
+
+<CardGroup cols={2}>
+
+<Card title="Improve Accuracy with Context" icon="brain-circuit" href="/essentials/contextual-correction">
+  Provide hints and jargon to the AI to get more accurate results for specialized audio.
+</Card>
+
+<Card title="Automatic Formatting" icon="align-left" href="/essentials/formatting">
+  Automatically add newlines and paragraphs to your transcript based on speech pauses.
+</Card>
+
+<Card title="Full API Reference" icon="code" href="/api-reference/create-transcription-job">
+  Explore all endpoints, parameters, and schemas in detail.
+</Card>
+
+</CardGroup>

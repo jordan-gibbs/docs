@@ -1,0 +1,285 @@
+---
+title: "Contextual Correction"
+description: "Leverage Fennec to correct domain-specific jargon, names, and other contextual errors in your transcripts, achieving near-human accuracy."
+icon: "brain-circuit"
+---
+
+Even the best ASR models can struggle with specific terminology, such as company names, project codenames, or technical jargon. The Contextual Correction feature addresses this by performing a secondary analysis pass on your transcript.
+
+By providing a small amount of "context," you can guide the AI to fix these specific errors, dramatically improving the accuracy and professionalism of your final transcript.
+
+## How It Works
+
+This feature is controlled by two parameters you send in your `/transcribe` request. When enabled, the initial transcript is chunked and analyzed by the AI, which uses your provided context to identify and fix errors.
+
+<ParamField body="apply_contextual_correction" type="boolean" default="false">
+  Set this to `true` to enable the secondary AI correction pass. If `false`, this feature is skipped entirely.
+</ParamField>
+
+<ParamField body="context" type="string" optional>
+  A string of text providing hints to the AI. This is where you should include correct spellings of names, products, or technical terms that the ASR might mishear.
+</ParamField>
+
+<Note>
+  **Performance Impact:** Enabling contextual correction adds processing time (latency) and increases the cost of the transcription. Use it when accuracy for specific terms is critical.
+</Note>
+
+## How to Use It
+
+Using the feature is as simple as adding two fields to your `multipart/form-data` request.
+
+### 1. Define your context and enable the flag
+
+In your Python script, create a string containing your contextual hints and set a boolean flag to `True`.
+
+```python
+# Provide hints to the AI to recognize proprietary or uncommon words, all in natural language.
+# You can also use this to change some simpler forms of formatting as well, such as capitalization or depluralization.
+context_string = "The company they are talking about is called Bartholomew Bros, correct any potential misinterpretations in the script."
+
+# A flag to enable the AI correction pass.
+apply_correction_flag = True
+```
+
+### Add the parameters to your request
+Include context and apply_contextual_correction in the data part of your requests.post call.
+
+```python A Full Example (quickstart_context.py)
+import os
+import time
+import requests
+import json
+
+BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+API_KEY = "YOUR_API_KEY_HERE"
+AUDIO_PATH = "sample.mp3"
+POLL_INTERVAL_S = 3
+=== NEW: Contextual Correction Configuration ===
+1. The context to send for the AI correction pass.
+context_string = "The company they are talking about is called Bartholomew Bros, correct any potential misinterpretations in the script."
+2. A flag to enable the AI correction pass.
+apply_correction_flag = True
+def transcribe_with_context():
+"""Submits an audio file with contextual correction enabled and polls for the result."""
+headers = {"X-API-Key": API_KEY}
+with open(AUDIO_PATH, "rb") as audio_file:
+    # 3. Prepare the request data.
+    files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
+    form_data = {
+        "context": context_string,
+        "apply_contextual_correction": apply_correction_flag
+    }
+
+    print("--- Submitting Transcription with Contextual Correction ---")
+    print(f"Applying Correction: {apply_correction_flag}")
+    print(f"Context: '{context_string}'")
+    print("---------------------------------------------------------")
+
+    try:
+        submit_response = requests.post(
+            f"{BASE_URL}/transcribe",
+            headers=headers,
+            files=files,
+            data=form_data # <-- Add the context and flag here
+        )
+        submit_response.raise_for_status()
+        job_id = submit_response.json().get("job_id")
+        print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+
+        # Polling logic remains the same...
+        status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+        while True:
+            status_response = requests.get(status_url, headers=headers)
+            status_response.raise_for_status()
+            data = status_response.json()
+            status = data.get("status")
+
+            if status == "completed":
+                print("\n🎉 Transcription Complete!")
+                print("-" * 25)
+                print(data.get("transcript"))
+                print("-" * 25)
+                break
+            elif status == "failed":
+                print("\n❌ Transcription failed. Error:", data.get("transcript"))
+                break
+            else:
+                print(f"  Current status: '{status}'... waiting.")
+                time.sleep(POLL_INTERVAL_S)
+
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+
+if name == "main":
+transcribe_with_context()
+```
+
+<AccordionGroup>
+  <Accordion icon="link" title="URL Example">
+
+    ```python URL Sample Script (quickstart_context_url.py)
+    # url_transcription_with_context.py
+import time
+import json
+import requests
+
+BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+API_KEY = "YOUR_API_KEY_HERE"  # <-- put your API key here
+AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
+
+CONTEXT_STRING = "The city being referred to is Corpus Christi. Make sure any potential confusions are corrected."
+APPLY_CORRECTION_FLAG = True  # set to False to disable
+
+# Polling
+POLL_INTERVAL_SECONDS = 3
+MAX_WAIT_SECONDS = 300
+
+def submit_job():
+    """Submit a URL transcription job with contextual correction; return job_id."""
+    headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+    payload = {
+        "audio": AUDIO_URL,
+        "context": CONTEXT_STRING,
+        "apply_contextual_correction": APPLY_CORRECTION_FLAG,
+    }
+
+    print("--- Submitting URL Transcription with Contextual Correction ---")
+    print(f"Audio URL: {AUDIO_URL}")
+    print(f"Applying Correction: {APPLY_CORRECTION_FLAG}")
+    print(f"Context: '{CONTEXT_STRING}'")
+    print("---------------------------------------------------------------")
+
+    resp = requests.post(f"{BASE_URL}/transcribe/url",
+                         headers=headers,
+                         data=json.dumps(payload),
+                         timeout=60)
+    resp.raise_for_status()
+    job_id = resp.json().get("job_id")
+    if not job_id:
+        raise RuntimeError("No job_id returned from submit endpoint.")
+    print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+    return job_id
+
+
+def poll_job(job_id):
+    """Poll status endpoint until completion/failure/timeout; return final JSON."""
+    headers = {"X-API-Key": API_KEY}
+    status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+
+    start = time.monotonic()
+    while time.monotonic() - start < MAX_WAIT_SECONDS:
+        print("Polling for status...")
+        try:
+            resp = requests.get(status_url, headers=headers, timeout=30)
+            if resp.status_code != 200:
+                print(f"  Error polling status: HTTP {resp.status_code}")
+                time.sleep(POLL_INTERVAL_SECONDS)
+                continue
+
+            data = resp.json()
+            status = data.get("status")
+            print(f"  Current status: '{status}'")
+
+            if status == "completed":
+                return data
+            if status == "failed":
+                return data
+        except requests.exceptions.RequestException as e:
+            print(f"  Polling error: {e}")
+
+        time.sleep(POLL_INTERVAL_SECONDS)
+
+    return {"status": "timeout", "transcript": None}
+
+
+def main():
+    try:
+        job_id = submit_job()
+        result = poll_job(job_id)
+
+        status = result.get("status")
+        if status == "completed":
+            transcript = result.get("transcript") or ""
+            print("\n🎉 Transcription complete!")
+            print("-" * 60)
+            print(transcript)
+            print("-" * 60)
+            if SAVE_TO:
+                with open(SAVE_TO, "w", encoding="utf-8") as f:
+                    f.write(transcript)
+                print(f"💾 Transcript saved to: {SAVE_TO}")
+        elif status == "failed":
+            print("\n❌ Transcription failed.")
+            print("Error:", result.get("transcript"))
+        else:
+            print("\n⏰ Polling timed out.")
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+
+  </Accordion>
+</AccordionGroup>
+
+### Example Result
+
+Contextual correction can fix errors that would be impossible to resolve without external knowledge.
+
+<CardGroup cols={1}>
+  <Card title="Before Correction" icon="circle-xmark">
+
+    **Transcript:**
+    ```text
+    Alright team, let's sync up on the Q3 project deliverables for Bahamian bureaus. The primary goal is to finalize the user interface mockups by Wednesday.
+    ```
+  </Card>
+  <Card title="After Correction" icon="circle-check">
+    **Context Provided:** `The company they are talking about is called Bartholomew Bros, correct any potential misinterpretations in the script.`
+
+    **Transcript:**
+    ```text
+    Alright team, let's sync up on the Q3 project deliverables for Bartholomew Bros. The primary goal is to finalize the user interface mockups by Wednesday.
+    ```
+  </Card>
+
+</CardGroup>
+
+### Deeper Use Cases
+
+This feature is also very useful for dynamic formatting work and subtle adjustments to anything in the text:
+
+<CardGroup cols={1}>
+  <Card title="Before Contextual Adjustment" icon="circle-xmark">
+
+    **Transcript:**
+    ```text
+The Fennec fox is a small fox native to the deserts of North Africa, ranging from Western Sahara and Mauritania to the Sinai Peninsula. Its most distinctive feature is its unusually large ears, which serve to dissipate heat and listen for underground prey. The fennec is the smallest fox species. Its coat, ears, and kidney functions have adapted to the desert environment with high temperatures and little water.
+
+The Fennec fox mainly eats insects, small mammals, and birds. It has a lifespan of up to fourteen years in captivity and about ten years in the wild. Pups are preyed upon by the pharaoh eagle owl. Both adults and pups may possibly fall prey to jackals and striped hyenas. Fennec families dig out burrows in the sand for habitation and protection, which can be as large as 120 meters squared, and adjoin the burrows of other families. Precise population figures are not known, but are estimated from the frequency of sightings. These indicate that the fennec fox is currently not threatened by extinction. Knowledge of social interactions is limited to information gathered from captive animals. The fennec fox is commonly trapped for exhibition or sale in North Africa, and it is considered an exotic pet in some parts of the world.
+    ```
+  </Card>
+  <Card title="After Contextual Adjustment" icon="circle-check">
+    **Context Provided:** `De-capitalize all proper nouns, unless they are the start of a sentence`
+
+    **Transcript:**
+    ```text
+The fennec fox is a small fox native to the deserts of north africa, ranging from western sahara and mauritania to the sinai peninsula. Its most distinctive feature is its unusually large ears, which serve to dissipate heat and listen for underground prey. The fennec is the smallest fox species. Its coat, ears, and kidney functions have adapted to the desert environment with high temperatures and little water.
+
+The fennec fox mainly eats insects, small mammals, and birds. It has a lifespan of up to fourteen years in captivity and about ten years in the wild. pups are preyed upon by the pharaoh eagle owl. Both adults and pups may possibly fall prey to jackals and striped hyenas. fennec families dig out burrows in the sand for habitation and protection, which can be as large as 120 meters squared, and adjoin the burrows of other families. Precise population figures are not known, but are estimated from the frequency of sightings. These indicate that the fennec fox is currently not threatened by extinction. Knowledge of social interactions is limited to information gathered from captive animals. The fennec fox is commonly trapped for exhibition or sale in north africa, and it is considered an exotic pet in some parts of the world.
+    ```
+  </Card>
+
+</CardGroup>
+
+
+## Tips for Writing Effective Context
+
+-   **Be Specific:** Instead of writing "The book is called 'Agoraphobia in Romanesque Society'" in the context field, write "The book being talked about is 'Agoraphobia in Romanesque Society', please ensure that anything that seems like it could be a misinterpretation of the title is replaced with this book title. Also, anytime someone says an abbreviation of the title (ARS) or what sounds like an abbreviation, replace it with the title."
+-   **Provide Correct Spellings:** Include a list of correctly spelled names and jargon, e.g., "Key terms to replace in this script: OAuth 2.0, Kubernetes, FastAPI, Pydantic."
+-   **Keep it Concise:** A few clear sentences are more effective than a long, rambling paragraph. Specific examples are helpful as well.

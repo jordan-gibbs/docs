@@ -1,0 +1,266 @@
+---
+title: "Automatic Formatting"
+description: "Automatically add paragraphs and line breaks to your transcripts based on speech pauses to dramatically improve readability."
+icon: "align-left"
+---
+
+Raw ASR output is often a dense wall of text, making it difficult to read and understand the flow of a conversation. The Automatic Formatting feature solves this by intelligently inserting newlines (`\n`) and double newlines (`\n\n`) into your transcript based on the duration of pauses between spoken words.
+
+This transforms a hard-to-read block of text into a well-structured, easy-to-scan document.
+
+## How It Works
+
+When you enable formatting, our API analyzes the word-level timestamps returned by the transcription model. You provide thresholds (in seconds) that tell the API when to insert line breaks.
+
+The feature is controlled by a single `formatting` parameter, which accepts a JSON string containing one or both of the following keys:
+
+<ParamField body="newline_pause_threshold" type="float" optional>
+  The pause duration (in seconds) required to insert a single newline (`\n`). This is ideal for shorter, conversational breaks.
+</ParamField>
+
+<ParamField body="double_newline_pause_threshold" type="float" optional>
+  The pause duration (in seconds) required to insert a double newline (`\n\n`), effectively creating a new paragraph. This is useful for marking a change in topic or speaker.
+</ParamField>
+
+<Note>
+  The `formatting` parameter must be sent as a **JSON-formatted string** within your `multipart/form-data` request, not as a raw JSON object. We'll show you how to do this below.
+</Note>
+
+## How to Use It
+
+To use this feature, you'll add the `formatting` field to your `/transcribe` request. The following example builds on the script from the Quickstart guide.
+
+### 1. Define your formatting rules
+
+In your Python script, create a dictionary with your desired pause thresholds.
+
+```python
+# Define the formatting rules in a Python dictionary
+# Add a newline for any pause over 0.8 seconds
+# Add a new paragraph for any pause over 1.5 seconds
+formatting_options = {
+    "newline_pause_threshold": 0.8,
+    "double_newline_pause_threshold": 1.5
+}
+```
+### 2. Convert the rules to a JSON string
+Use Python's json library to serialize the dictionary into a string.
+
+```python
+import json
+
+# The API expects a JSON string, so we serialize the dictionary
+formatting_string = json.dumps(formatting_options)
+```
+
+### 3. Send the request
+Pass the serialized string in the data part of your requests.post call.
+
+```python A Full Example (quickstart_format.py)
+import os
+import time
+import requests
+import json # <-- Import the json library
+
+BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+API_KEY = "YOUR_API_KEY_HERE"
+AUDIO_PATH = "sample.mp3"
+POLL_INTERVAL_S = 3
+=== NEW: Formatting Configuration ===
+1. Define your formatting rules as a Python dictionary.
+formatting_options = {
+"newline_pause_threshold": 0.8,
+"double_newline_pause_threshold": 1.5
+}
+def transcribe_with_formatting():
+"""Submits an audio file with formatting rules and polls for the result."""
+headers = {"X-API-Key": API_KEY}
+with open(AUDIO_PATH, "rb") as audio_file:
+    # 2. Prepare the request data.
+    # The 'files' dict handles the file upload part.
+    files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
+
+    # The 'data' dict handles other form fields.
+    # The 'formatting' value MUST be a JSON-formatted string.
+    form_data = {
+        "formatting": json.dumps(formatting_options)
+    }
+
+    print("--- Submitting Transcription with Formatting ---")
+    print(f"Formatting Rules: {form_data['formatting']}")
+    print("----------------------------------------------")
+
+    try:
+        # 3. Add the 'data' parameter to send the new form field.
+        submit_response = requests.post(
+            f"{BASE_URL}/transcribe",
+            headers=headers,
+            files=files,
+            data=form_data # <-- Add the formatting rules here
+        )
+        submit_response.raise_for_status()
+        job_id = submit_response.json().get("job_id")
+        print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+
+        # Polling logic remains the same...
+        status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+        while True:
+            status_response = requests.get(status_url, headers=headers)
+            status_response.raise_for_status()
+            data = status_response.json()
+            status = data.get("status")
+
+            if status == "completed":
+                print("\n🎉 Transcription Complete!")
+                print("-" * 25)
+                # The output will now have newlines!
+                print(data.get("transcript"))
+                print("-" * 25)
+                break
+            elif status == "failed":
+                print("\n❌ Transcription failed. Error:", data.get("transcript"))
+                break
+            else:
+                print(f"  Current status: '{status}'... waiting.")
+                time.sleep(POLL_INTERVAL_S)
+
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+
+
+if name == "main":
+transcribe_with_formatting()
+
+
+```
+
+<AccordionGroup>
+  <Accordion icon="link" title="URL Example">
+
+    ```python URL Sample Script (quickstart_formatting_url.py)
+import time
+import json
+import requests
+
+BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+API_KEY = "YOUR_API_KEY_HERE"
+AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
+
+POLL_INTERVAL_SECONDS = 5
+MAX_WAIT_SECONDS = 300
+
+formatting_options = {
+    "newline_pause_threshold": 0.8,
+    "double_newline_pause_threshold": 1.5
+}
+
+def submit_job():
+    """Submit a URL transcription job with formatting; return job_id."""
+    headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+    # The 'formatting' value MUST be a JSON-formatted string.
+    payload = {
+        "audio": AUDIO_URL,
+        "formatting": json.dumps(formatting_options)
+    }
+
+    print("--- Submitting URL Transcription with Formatting ---")
+    print(f"Audio URL: {AUDIO_URL}")
+    print(f"Formatting: {payload['formatting']}")
+    print("----------------------------------------------------")
+
+    resp = requests.post(f"{BASE_URL}/transcribe/url",
+                         headers=headers,
+                         data=json.dumps(payload),
+                         timeout=60)
+    resp.raise_for_status()
+    job_id = resp.json().get("job_id")
+    if not job_id:
+        raise RuntimeError("No job_id returned from submit endpoint.")
+    print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+    return job_id
+
+def poll_job(job_id):
+    """Poll status endpoint until completion/failure/timeout; return final JSON."""
+    headers = {"X-API-Key": API_KEY}
+    status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+
+    start = time.monotonic()
+    while time.monotonic() - start < MAX_WAIT_SECONDS:
+        print("Polling for status...")
+        try:
+            resp = requests.get(status_url, headers=headers, timeout=30)
+            if resp.status_code != 200:
+                print(f"  Error polling status: HTTP {resp.status_code}")
+                time.sleep(POLL_INTERVAL_SECONDS)
+                continue
+
+            data = resp.json()
+            status = data.get("status")
+            print(f"  Current status: '{status}'")
+
+            if status == "completed":
+                return data
+            if status == "failed":
+                return data
+        except requests.exceptions.RequestException as e:
+            print(f"  Polling error: {e}")
+
+        time.sleep(POLL_INTERVAL_SECONDS)
+
+    return {"status": "timeout", "transcript": None}
+
+def main():
+    try:
+        job_id = submit_job()
+        result = poll_job(job_id)
+
+        status = result.get("status")
+        if status == "completed":
+            transcript = result.get("transcript") or ""
+            print("\n🎉 Transcription complete!")
+            print("-" * 60)
+            print(transcript)
+            print("-" * 60)
+        elif status == "failed":
+            print("\n❌ Transcription failed.")
+            print("Error:", result.get("transcript"))
+        else:
+            print("\n⏰ Polling timed out.")
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+
+if __name__ == "__main__":
+    main()
+
+```
+
+
+  </Accordion>
+</AccordionGroup>
+
+
+## Example Result
+
+Applying formatting makes a huge difference in readability.
+
+<CardGroup cols={1}>
+  <Card title="Before Formatting" icon="align-justify">
+    ```text
+    Alright team let's sync up on the Q3 project deliverables for Fennec aural. The primary goal is to finalize the user interface mockups by Wednesday. I've finished the preliminary analysis for the core features and have the numbers ready. We need to ensure that the new design is both intuitive and accessible. I'm reviewing the data on the acting ink report now. Great, pull them up. We need to finalize the presentation by tomorrow. The client expects a full walkthrough.
+    ```
+  </Card>
+  <Card title="After Formatting" icon="align-left">
+    ```text
+    Alright team let's sync up on the Q3 project deliverables for Fennec aural. The primary goal is to finalize the user interface mockups by Wednesday.
+
+    I've finished the preliminary analysis for the core features and have the numbers ready. We need to ensure that the new design is both intuitive and accessible.
+
+    I'm reviewing the data on the acting ink report now.
+
+    Great, pull them up. We need to finalize the presentation by tomorrow. The client expects a full walkthrough.
+    ```
+  </Card>
+</CardGroup>
+

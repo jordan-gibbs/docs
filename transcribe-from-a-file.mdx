@@ -1,0 +1,137 @@
+---
+title: "Transcribe from a file"
+description: "Transcribe your first audio file in minutes with Fennec API."
+---
+
+## Get started in five minutes
+
+Follow this guide to get your API key, submit your first audio file for transcription, and see the result.
+
+### Step 1: Get your API Key
+
+Your API key is used to authenticate your requests. Follow this link to grab your first API key.
+
+### Step 2: Prepare your first transcription
+
+Now, let's write a simple script to send an audio file to the API.
+
+<AccordionGroup>
+  <Accordion icon="file-audio" title="1. Prepare your audio file">
+    Download [this audio file](https://static.wixstatic.com/mp3/748cf5_b8310da2c11b432f86f14922a89bec02.mp3)
+ and save it as `sample.mp3` in the same directory where you will save the Python script below.
+
+    <Tip>Our API works best with common audio formats like MP3, WAV, M4A, and FLAC.</Tip>
+  </Accordion>
+
+  <Accordion icon="language" title="2. Create the Python script">
+    Create a new file named `quickstart.py`. Copy and paste the code below into it.
+
+    This script submits your `sample.mp3` file, waits for the transcription to complete, and then prints the final text.
+
+    ```python quickstart.py
+    import os
+    import time
+    import requests
+
+    # --- Configuration ---
+    BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+    API_KEY = "YOUR_API_KEY_HERE" # 👈 Paste your API key here
+    AUDIO_PATH = "sample.mp3"     # The audio file you prepared
+    POLL_INTERVAL_S = 3
+
+    # --- Main Transcription Logic ---
+    def transcribe_audio():
+        """Submits an audio file and polls for the transcription result."""
+        if not os.path.exists(AUDIO_PATH):
+            print(f"❌ Error: Audio file not found at '{AUDIO_PATH}'.")
+            print("   Please make sure the audio file is in the same directory as this script.")
+            return
+
+        if "YOUR_API_KEY_HERE" in API_KEY:
+            print("❌ Error: Please replace 'YOUR_API_KEY_HERE' with your actual API key.")
+            return
+
+        headers = {"X-API-Key": API_KEY}
+
+        with open(AUDIO_PATH, "rb") as audio_file:
+            files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
+
+            print(f"Submitting '{AUDIO_PATH}' for transcription...")
+            try:
+                # 1. Submit the job
+                submit_response = requests.post(f"{BASE_URL}/transcribe", headers=headers, files=files)
+                submit_response.raise_for_status()
+                job_id = submit_response.json().get("job_id")
+                print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+
+                # 2. Poll for the result
+                status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+                while True:
+                    status_response = requests.get(status_url, headers=headers)
+                    status_response.raise_for_status()
+                    data = status_response.json()
+                    status = data.get("status")
+
+                    if status == "completed":
+                        print("\n🎉 Transcription Complete!")
+                        print("-" * 25)
+                        print(data.get("transcript"))
+                        print("-" * 25)
+                        break
+                    elif status == "failed":
+                        print("\n❌ Transcription failed.")
+                        print("Error:", data.get("transcript"))
+                        break
+                    else:
+                        print(f"  Current status: '{status}'... waiting.")
+                        time.sleep(POLL_INTERVAL_S)
+
+            except requests.exceptions.RequestException as e:
+                print(f"An error occurred: {e}")
+                if e.response:
+                    print(f"Response Body: {e.response.text}")
+
+    # --- Run the script ---
+    if __name__ == "__main__":
+        transcribe_audio()
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Step 3: Run it
+
+You're ready to go!
+
+<Accordion icon="rocket" title="Run the script">
+  1.  Open your terminal in the directory containing `quickstart.py` and `sample.mp3`.
+  2.  Run the script:
+        ```bash
+        python quickstart.py
+        ```
+  3.  Watch as the script polls for the status and finally prints your transcript!
+
+</Accordion>
+
+## Next Steps
+
+Now that you've completed your first transcription, you can explore the API's more powerful features.
+
+<CardGroup cols={2}>
+
+<Card title="Transcribe from a URL" icon="link" href="/transcribe-from-a-url">
+  Submit a public URL for transcription instead of uploading a file.
+</Card>
+
+<Card title="Improve Accuracy with Context" icon="brain-circuit" href="/essentials/contextual-correction">
+  Provide hints and jargon to the AI to get more accurate results for specialized audio.
+</Card>
+
+<Card title="Automatic Formatting" icon="align-left" href="/essentials/formatting">
+  Automatically add newlines and paragraphs to your transcript based on speech pauses.
+</Card>
+
+<Card title="Full API Reference" icon="code" href="/api-reference/create-transcription-job">
+  Explore all endpoints, parameters, and schemas in detail.
+</Card>
+
+</CardGroup>
