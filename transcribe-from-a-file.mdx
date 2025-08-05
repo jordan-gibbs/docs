@@ -1,11 +1,10 @@
 ---
 title: "Transcribe from a file"
-description: "Transcribe your first audio file in minutes with Fennec API."
+description: ""
+icon: "file"
 ---
 
 ## Get started in five minutes
-
-Follow this guide to get your API key, submit your first audio file for transcription, and see the result.
 
 ### Step 1: Get your API Key
 
@@ -20,7 +19,7 @@ Now, let's write a simple script to send an audio file to the API.
     Download [this audio file](https://static.wixstatic.com/mp3/748cf5_b8310da2c11b432f86f14922a89bec02.mp3)
  and save it as `sample.mp3` in the same directory where you will save the Python script below.
 
-    <Tip>Our API works best with common audio formats like MP3, WAV, M4A, and FLAC.</Tip>
+    <Tip>Our API works best with common audio formats like MP3, WAV, M4A, OGG, WEBM, and FLAC.</Tip>
   </Accordion>
 
   <Accordion icon="language" title="2. Create the Python script">
@@ -33,15 +32,12 @@ Now, let's write a simple script to send an audio file to the API.
     import time
     import requests
 
-    # --- Configuration ---
     BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
     API_KEY = "YOUR_API_KEY_HERE" # 👈 Paste your API key here
-    AUDIO_PATH = "sample.mp3"     # The audio file you prepared
+    AUDIO_PATH = "sample.mp3"
     POLL_INTERVAL_S = 3
 
-    # --- Main Transcription Logic ---
     def transcribe_audio():
-        """Submits an audio file and polls for the transcription result."""
         if not os.path.exists(AUDIO_PATH):
             print(f"❌ Error: Audio file not found at '{AUDIO_PATH}'.")
             print("   Please make sure the audio file is in the same directory as this script.")

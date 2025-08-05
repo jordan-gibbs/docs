@@ -1,0 +1,267 @@
+---
+title: "Live Streaming Transcription"
+description: "Stream audio directly from any source and receive low-latency transcripts in real-time using our WebSocket endpoint, with fine-grained VAD controls."
+icon: "microphone-lines"
+---
+
+For applications requiring immediate feedback, such as live captioning, voice commands, or AI voice agents, the WebSocket endpoint provides real-time transcription. You can stream raw audio and receive transcripts back as soon as a speaker pauses, all with sub-250 ms latency.
+
+This endpoint's behavior is primarily controlled by Voice Activity Detection (VAD), which intelligently segments the audio stream into utterances based on speech and silence.
+
+## How It Works
+
+The process is straightforward:
+
+1.  **Connect:** Establish a WebSocket connection to the `/stream` endpoint.
+2.  **Configure:** Send an initial JSON message containing your desired configuration, including audio format and VAD settings. This is a critical first step.
+3.  **Stream:** Send raw audio data as binary messages.
+4.  **Receive:** Listen for JSON messages from the server containing the final transcript for each utterance.
+5.  **Close:** Send an `eos` (end-of-stream) message to gracefully terminate the connection.
+
+The following example uses your machine's microphone as the audio source.
+
+```python A Full Example (mic_ws_continuous.py)
+import asyncio
+import json
+import signal
+import sounddevice as sd
+import websockets
+
+# --- API Configuration ---
+BASE_URL = "wss://asr-api-hso0.onrender.com/api/v1/transcribe/stream"
+API_KEY = "YOUR_API_KEY_HERE"
+WEBSOCKET_URL = f"{BASE_URL}?api_key={API_KEY}"
+
+# --- Audio Configuration ---
+SAMPLE_RATE = 16_000
+CHANNELS = 1
+DTYPE = "int16"
+CHUNK_MS = 100
+FRAMES_PER_CHUNK = int(SAMPLE_RATE * (CHUNK_MS / 1000.0))
+
+# --- WebSocket Start Message ---
+# This dictionary is sent once upon connection to configure the VAD.
+START_MSG = {
+    "type": "start",
+    "sample_rate": 16000,
+    "channels": 1,
+    "single_utterance": False,  # Keep connection open after each transcript
+    "vad": {
+        "threshold": 0.45,  # VAD sensitivity. Lower is more sensitive. 0.5 is a good baseline.
+        "min_silence_ms": 400,  # Milliseconds of silence to trigger an End-of-Speech event.
+        "speech_pad_ms": 200,  # Milliseconds of audio to include before speech starts.
+        "final_silence_s": 0,  # Additional silence to wait for at the end.
+        "start_trigger_ms": 30,  # How many ms of speech are needed to start transcribing.
+        "min_voiced_ms": 100,  # Utterance is discarded if it has less than this much voiced audio.
+        "min_chars": 2,  # Discard transcript if it has fewer characters than this.
+        "min_words": 1,  # Discard transcript if it has fewer words than this.
+        "amp_extend": 1200  # A non-speech noise can extend utterance, but not start it.
+    }
+}
+
+# --- Graceful Shutdown ---
+shutdown_event = asyncio.Event()
+
+def _handle_sigint(*_):
+    print("\nStopping…", flush=True)
+    shutdown_event.set()
+
+async def audio_sender(ws, stream):
+    """Reads from the mic and sends audio chunks to the WebSocket."""
+    print("\n🎙️  Streaming mic… speak, and pause to see the transcript. (Ctrl+C to stop)", flush=True)
+    while not shutdown_event.is_set():
+        try:
+            data, _ = await asyncio.to_thread(stream.read, FRAMES_PER_CHUNK)
+            await ws.send(bytes(data))
+        except websockets.exceptions.ConnectionClosed:
+            break
+
+    try:
+        await ws.send('{"type":"eos"}')
+    except websockets.exceptions.ConnectionClosed:
+        pass
+
+async def message_receiver(ws):
+    """Listens for messages from the server and prints them."""
+    async for msg in ws:
+        data = json.loads(msg)
+        if text := data.get("text"):
+            print(text, flush=True)
+
+async def main():
+    """Main function to connect and stream microphone audio."""
+    print(f"Connecting to: {WEBSOCKET_URL}")
+    try:
+        async with websockets.connect(WEBSOCKET_URL, max_size=None, ping_interval=5) as ws:
+            # Send the configuration message.
+            await ws.send(json.dumps(START_MSG))
+            print("✅ WebSocket connected. Sent VAD configuration.")
+
+            with sd.RawInputStream(
+                    samplerate=SAMPLE_RATE,
+                    channels=CHANNELS,
+                    dtype=DTYPE,
+                    blocksize=FRAMES_PER_CHUNK,
+            ) as stream:
+                # Run the sender and receiver concurrently.
+                sender_task = asyncio.create_task(audio_sender(ws, stream))
+                receiver_task = asyncio.create_task(message_receiver(ws))
+                await asyncio.wait([sender_task, receiver_task], return_when=asyncio.FIRST_COMPLETED)
+
+    except Exception as e:
+        print(f"❌ An unexpected error occurred: {e}")
+
+if __name__ == "__main__":
+    if not sd.query_devices(kind='input'):
+        print("\n❌ No input microphone found.")
+    else:
+        signal.signal(signal.SIGINT, _handle_sigint)
+        asyncio.run(main())
+```
+
+
+## Understanding VAD
+
+Voice Activity Detection acts as the Fennec's "ears," listening for speech and silence to intelligently segment the continuous audio stream into meaningful chunks, or "utterances." Properly tuning the VAD settings is the most critical step to tailor the transcription behavior for your specific application.
+
+All VAD settings are passed inside the vad dictionary within your initial start message.
+
+### Core VAD Parameters
+These parameters control the fundamental timing and sensitivity of the speech detection.
+
+<ParamField body="vad.threshold" type="float" default="0.5">
+VAD Sensitivity. This float between 0.0 and 1.0 determines how loud a sound must be to be considered speech. Lower values (e.g., 0.3) are more sensitive and can pick up quieter speakers or whispers, but may also misclassify background noise as speech. Higher values (e.g., 0.7) are less sensitive and are ideal for ignoring background noise in loud environments. 0.5 is a balanced starting point.
+</ParamField>
+
+<ParamField body="vad.min_silence_ms" type="integer" default="400">
+End-of-Speech Trigger. This is the most important parameter for controlling the latency-vs-completeness tradeoff. It defines the duration of silence (in milliseconds) the system will wait for before finalizing an utterance and sending the transcript. A low value (250) results in fast, short transcripts. A high value (1000) results in longer, more complete sentences but increases the perceived delay.
+</ParamField>
+
+<ParamField body="vad.speech_pad_ms" type="integer" default="200">
+Pre-Speech Audio Buffer. This setting captures a small amount of audio (in milliseconds) from before the VAD officially detected the start of speech. It is crucial for preventing the first syllable or word of an utterance from being cut off (e.g., ensuring "Okay, let's start" isn't transcribed as "kay, let's start").
+</ParamField>
+
+<ParamField body="vad.final_silence_s" type="integer" default="0">
+Post-Utterance Silence. This specifies an extra duration of silence (in seconds) to append to the end of a finalized utterance before it's sent for transcription. This can sometimes provide the ASR model with more non-speech context, which can help in correctly punctuating the very end of a sentence, but it will directly add to the overall latency. Use with caution.
+</ParamField>
+
+Advanced Filtering and Control Parameters
+These parameters provide fine-grained control over what constitutes a valid utterance, helping to filter out noise and unwanted segments.
+
+<ParamField body="vad.start_trigger_ms" type="integer" default="36">
+Minimum Speech to Start. An utterance will not begin until the VAD detects at least this many milliseconds of continuous speech. This helps prevent very short vocal tics or brief background noises from incorrectly starting a new transcription segment.
+</ParamField>
+
+<ParamField body="vad.min_voiced_ms" type="integer" default="100">
+Minimum Voiced Audio per Utterance. After an utterance is segmented, the system checks if it contains at least this much voiced audio. If not, the entire segment is discarded. This is a powerful tool for filtering out non-speech sounds like coughs, door slams, or clicks that might otherwise be long enough to form a segment.
+</ParamField>
+
+<ParamField body="vad.min_chars" type="integer" default="2">
+Minimum Transcript Character Length. After a segment is transcribed, the system checks the character count of the resulting text. If it's less than this value, the transcript is discarded. This is a post-processing filter useful for eliminating transcripts of filler words like "a" or "uh".
+</ParamField>
+
+<ParamField body="vad.min_words" type="integer" default="1">
+Minimum Transcript Word Count. Similar to min_chars, but works on the word count. Setting this to 2 would discard single-word utterances (e.g., "Okay", "Right").
+</ParamField>
+
+<ParamField body="vad.amp_extend" type="integer" default="1200">
+Non-Speech Utterance Extension. This allows a non-speech sound (below the threshold) to extend a currently active speech utterance for up to this many milliseconds. However, such a sound cannot start a new utterance. This is useful for cases where a speaker's voice trails off or a quiet background noise occurs mid-sentence, preventing the utterance from cutting off prematurely.
+</ParamField>
+
+<ParamField body="vad.force_decode_ms" type="integer" default="0">
+Maximum Utterance Duration. If this is set to a value greater than 0 (e.g., 15000 for 15 seconds), it acts as a safety net. The system will automatically finalize and transcribe an utterance after it reaches this duration, even if the speaker has not paused. This prevents infinitely long transcripts from users who don't pause naturally.
+</ParamField>
+
+<ParamField body="vad.debug" type="boolean" default="false">
+Enable Debug Logging. If set to true, the server will send additional diagnostic messages along with the transcripts. This is useful for development and fine-tuning VAD settings, but should be disabled in production.
+</ParamField>
+
+VAD Configuration Examples
+Here are three fully-configured START_MSG examples tailored for different real-world situations.
+
+<CardGroup cols={1}>
+<Card title="Scenario 1: Fast Voice Commands" icon="bolt-lightning">
+This profile is optimized for rapid response AI voice assistants.
+
+```python
+START_MSG = {
+    "type": "start",
+    "sample_rate": 16000,
+    "channels": 1,
+    "single_utterance": False,
+    "vad": {
+        "threshold": 0.5,
+        "min_silence_ms": 250,      # Very short silence to trigger end-of-speech
+        "speech_pad_ms": 100,
+        "start_trigger_ms": 50,
+        "min_voiced_ms": 150,       # Require a decent amount of speech
+        "min_chars": 3,             # Filter out "uh", "um"
+        "min_words": 1
+    }
+}
+```
+**Rationale:**
+-   `min_silence_ms` is very low (`250`) to ensure the commands are processed the instant the user stops speaking.
+-   `min_voiced_ms` and `min_chars` are slightly higher to aggressively filter out accidental noises, ensuring only intentional commands are transcribed.
+-   `speech_pad_ms` is kept to a reasonable value to avoid cutting off the start of the command.
+</Card>
+
+<Card title="Scenario 2: General Purpose Dictation" icon="keyboard">
+This profile is balanced for users dictating notes or emails. It favors creating more complete sentences over instant responsiveness.
+
+```python
+START_MSG = {
+    "type": "start",
+    "sample_rate": 16000,
+    "channels": 1,
+    "single_utterance": False,
+    "vad": {
+        "threshold": 0.45,
+        "min_silence_ms": 800,      # Longer silence to allow for pauses mid-sentence
+        "speech_pad_ms": 200,
+        "start_trigger_ms": 36,
+        "min_voiced_ms": 100,
+        "min_chars": 2,
+        "min_words": 1,
+        "force_decode_ms": 60000   # Force a transcript after 60s for long-winded speakers
+    }
+}
+```
+**Rationale:**
+-   `min_silence_ms` is high (`800`) to give users time to think between clauses without breaking the sentence.
+-   `force_decode_ms` is enabled as a fallback, ensuring that even if a user talks for a long time, they will get a transcript back every 20 seconds.
+-   `threshold` is slightly more sensitive (`0.45`) for more natural-sounding dictation.
+</Card>
+
+<Card title="Scenario 3: Transcription in a Noisy Environment" icon="volume-high">
+This profile is hardened for use-cases like a call center or public kiosk where significant background noise is expected. The goal is to reject as much non-speech audio as possible.
+
+```python
+START_MSG = {
+    "type": "start",
+    "sample_rate": 16000,
+    "channels": 1,
+    "single_utterance": False,
+    "vad": {
+        "threshold": 0.65,          # High threshold to ignore background chatter
+        "min_silence_ms": 400,
+        "speech_pad_ms": 150,
+        "start_trigger_ms": 100,    # Requires a clear, intentional start to speech
+        "min_voiced_ms": 250,       # Very high requirement for voiced audio
+        "min_chars": 5,             # Filter out short background words
+        "min_words": 2,             # Require at least two words
+        "amp_extend": 0,            # Disable extension from quiet sounds
+        "debug": False
+    }
+}
+```
+**Rationale:**
+-   `threshold` is set high (`0.65`) to make the VAD less sensitive, effectively ignoring lower-volume background sounds.
+-   `start_trigger_ms` and `min_voiced_ms` are both significantly increased to ensure only strong, clear speech from the primary speaker creates an utterance.
+-   `min_chars` and `min_words` are increased to filter out partial words or phrases picked up from background conversations.
+-   `amp_extend` is disabled (`0`) to prevent background hum or noise from incorrectly keeping an utterance alive.
+
+</Card>
+
+Please know that building with VAD is an iterative process, and giving your end user indirect control of these parameters can enhance the experience for their specific situation.
+</CardGroup>

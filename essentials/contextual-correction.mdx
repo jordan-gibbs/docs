@@ -54,173 +54,168 @@ BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
 API_KEY = "YOUR_API_KEY_HERE"
 AUDIO_PATH = "sample.mp3"
 POLL_INTERVAL_S = 3
-=== NEW: Contextual Correction Configuration ===
-1. The context to send for the AI correction pass.
+
 context_string = "The company they are talking about is called Bartholomew Bros, correct any potential misinterpretations in the script."
-2. A flag to enable the AI correction pass.
+
 apply_correction_flag = True
 def transcribe_with_context():
-"""Submits an audio file with contextual correction enabled and polls for the result."""
-headers = {"X-API-Key": API_KEY}
-with open(AUDIO_PATH, "rb") as audio_file:
-    # 3. Prepare the request data.
-    files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
-    form_data = {
-        "context": context_string,
-        "apply_contextual_correction": apply_correction_flag
-    }
+    headers = {"X-API-Key": API_KEY}
+    with open(AUDIO_PATH, "rb") as audio_file:
+        # 3. Prepare the request data.
+        files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
+        form_data = {
+            "context": context_string,
+            "apply_contextual_correction": apply_correction_flag
+        }
 
-    print("--- Submitting Transcription with Contextual Correction ---")
-    print(f"Applying Correction: {apply_correction_flag}")
-    print(f"Context: '{context_string}'")
-    print("---------------------------------------------------------")
+        print("--- Submitting Transcription with Contextual Correction ---")
+        print(f"Applying Correction: {apply_correction_flag}")
+        print(f"Context: '{context_string}'")
+        print("---------------------------------------------------------")
 
-    try:
-        submit_response = requests.post(
-            f"{BASE_URL}/transcribe",
-            headers=headers,
-            files=files,
-            data=form_data # <-- Add the context and flag here
-        )
-        submit_response.raise_for_status()
-        job_id = submit_response.json().get("job_id")
-        print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+        try:
+            submit_response = requests.post(
+                f"{BASE_URL}/transcribe",
+                headers=headers,
+                files=files,
+                data=form_data # <-- Add the context and flag here
+            )
+            submit_response.raise_for_status()
+            job_id = submit_response.json().get("job_id")
+            print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
 
-        # Polling logic remains the same...
-        status_url = f"{BASE_URL}/transcribe/status/{job_id}"
-        while True:
-            status_response = requests.get(status_url, headers=headers)
-            status_response.raise_for_status()
-            data = status_response.json()
-            status = data.get("status")
+            # Polling logic remains the same...
+            status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+            while True:
+                status_response = requests.get(status_url, headers=headers)
+                status_response.raise_for_status()
+                data = status_response.json()
+                status = data.get("status")
 
-            if status == "completed":
-                print("\n🎉 Transcription Complete!")
-                print("-" * 25)
-                print(data.get("transcript"))
-                print("-" * 25)
-                break
-            elif status == "failed":
-                print("\n❌ Transcription failed. Error:", data.get("transcript"))
-                break
-            else:
-                print(f"  Current status: '{status}'... waiting.")
-                time.sleep(POLL_INTERVAL_S)
+                if status == "completed":
+                    print("\n🎉 Transcription Complete!")
+                    print("-" * 25)
+                    print(data.get("transcript"))
+                    print("-" * 25)
+                    break
+                elif status == "failed":
+                    print("\n❌ Transcription failed. Error:", data.get("transcript"))
+                    break
+                else:
+                    print(f"  Current status: '{status}'... waiting.")
+                    time.sleep(POLL_INTERVAL_S)
 
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred: {e}")
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred: {e}")
 
-if name == "main":
-transcribe_with_context()
+if __name__ == "__main__":
+    transcribe_with_context()
 ```
 
 <AccordionGroup>
   <Accordion icon="link" title="URL Example">
 
     ```python URL Sample Script (quickstart_context_url.py)
-    # url_transcription_with_context.py
-import time
-import json
-import requests
+    import time
+    import json
+    import requests
 
-BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
-API_KEY = "YOUR_API_KEY_HERE"  # <-- put your API key here
-AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
+    BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+    API_KEY = "YOUR_API_KEY_HERE"  # <-- put your API key here
+    AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
 
-CONTEXT_STRING = "The city being referred to is Corpus Christi. Make sure any potential confusions are corrected."
-APPLY_CORRECTION_FLAG = True  # set to False to disable
+    CONTEXT_STRING = "The city being referred to is Corpus Christi. Make sure any potential confusions are corrected."
+    APPLY_CORRECTION_FLAG = True  # set to False to disable
 
-# Polling
-POLL_INTERVAL_SECONDS = 3
-MAX_WAIT_SECONDS = 300
+    # Polling
+    POLL_INTERVAL_SECONDS = 3
+    MAX_WAIT_SECONDS = 300
 
-def submit_job():
-    """Submit a URL transcription job with contextual correction; return job_id."""
-    headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
-    payload = {
-        "audio": AUDIO_URL,
-        "context": CONTEXT_STRING,
-        "apply_contextual_correction": APPLY_CORRECTION_FLAG,
-    }
+    def submit_job():
+        headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+        payload = {
+            "audio": AUDIO_URL,
+            "context": CONTEXT_STRING,
+            "apply_contextual_correction": APPLY_CORRECTION_FLAG,
+        }
 
-    print("--- Submitting URL Transcription with Contextual Correction ---")
-    print(f"Audio URL: {AUDIO_URL}")
-    print(f"Applying Correction: {APPLY_CORRECTION_FLAG}")
-    print(f"Context: '{CONTEXT_STRING}'")
-    print("---------------------------------------------------------------")
+        print("--- Submitting URL Transcription with Contextual Correction ---")
+        print(f"Audio URL: {AUDIO_URL}")
+        print(f"Applying Correction: {APPLY_CORRECTION_FLAG}")
+        print(f"Context: '{CONTEXT_STRING}'")
+        print("---------------------------------------------------------------")
 
-    resp = requests.post(f"{BASE_URL}/transcribe/url",
-                         headers=headers,
-                         data=json.dumps(payload),
-                         timeout=60)
-    resp.raise_for_status()
-    job_id = resp.json().get("job_id")
-    if not job_id:
-        raise RuntimeError("No job_id returned from submit endpoint.")
-    print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
-    return job_id
+        resp = requests.post(f"{BASE_URL}/transcribe/url",
+                             headers=headers,
+                             data=json.dumps(payload),
+                             timeout=60)
+        resp.raise_for_status()
+        job_id = resp.json().get("job_id")
+        if not job_id:
+            raise RuntimeError("No job_id returned from submit endpoint.")
+        print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+        return job_id
 
 
-def poll_job(job_id):
-    """Poll status endpoint until completion/failure/timeout; return final JSON."""
-    headers = {"X-API-Key": API_KEY}
-    status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+    def poll_job(job_id):
+        headers = {"X-API-Key": API_KEY}
+        status_url = f"{BASE_URL}/transcribe/status/{job_id}"
 
-    start = time.monotonic()
-    while time.monotonic() - start < MAX_WAIT_SECONDS:
-        print("Polling for status...")
+        start = time.monotonic()
+        while time.monotonic() - start < MAX_WAIT_SECONDS:
+            print("Polling for status...")
+            try:
+                resp = requests.get(status_url, headers=headers, timeout=30)
+                if resp.status_code != 200:
+                    print(f"  Error polling status: HTTP {resp.status_code}")
+                    time.sleep(POLL_INTERVAL_SECONDS)
+                    continue
+
+                data = resp.json()
+                status = data.get("status")
+                print(f"  Current status: '{status}'")
+
+                if status == "completed":
+                    return data
+                if status == "failed":
+                    return data
+            except requests.exceptions.RequestException as e:
+                print(f"  Polling error: {e}")
+
+            time.sleep(POLL_INTERVAL_SECONDS)
+
+        return {"status": "timeout", "transcript": None}
+
+
+    def main():
         try:
-            resp = requests.get(status_url, headers=headers, timeout=30)
-            if resp.status_code != 200:
-                print(f"  Error polling status: HTTP {resp.status_code}")
-                time.sleep(POLL_INTERVAL_SECONDS)
-                continue
+            job_id = submit_job()
+            result = poll_job(job_id)
 
-            data = resp.json()
-            status = data.get("status")
-            print(f"  Current status: '{status}'")
-
+            status = result.get("status")
             if status == "completed":
-                return data
-            if status == "failed":
-                return data
+                transcript = result.get("transcript") or ""
+                print("\n🎉 Transcription complete!")
+                print("-" * 60)
+                print(transcript)
+                print("-" * 60)
+                if SAVE_TO:
+                    with open(SAVE_TO, "w", encoding="utf-8") as f:
+                        f.write(transcript)
+                    print(f"💾 Transcript saved to: {SAVE_TO}")
+            elif status == "failed":
+                print("\n❌ Transcription failed.")
+                print("Error:", result.get("transcript"))
+            else:
+                print("\n⏰ Polling timed out.")
         except requests.exceptions.RequestException as e:
-            print(f"  Polling error: {e}")
-
-        time.sleep(POLL_INTERVAL_SECONDS)
-
-    return {"status": "timeout", "transcript": None}
+            print(f"An error occurred: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
 
 
-def main():
-    try:
-        job_id = submit_job()
-        result = poll_job(job_id)
-
-        status = result.get("status")
-        if status == "completed":
-            transcript = result.get("transcript") or ""
-            print("\n🎉 Transcription complete!")
-            print("-" * 60)
-            print(transcript)
-            print("-" * 60)
-            if SAVE_TO:
-                with open(SAVE_TO, "w", encoding="utf-8") as f:
-                    f.write(transcript)
-                print(f"💾 Transcript saved to: {SAVE_TO}")
-        elif status == "failed":
-            print("\n❌ Transcription failed.")
-            print("Error:", result.get("transcript"))
-        else:
-            print("\n⏰ Polling timed out.")
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred: {e}")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-
-
-if __name__ == "__main__":
-    main()
+    if __name__ == "__main__":
+        main()
 ```
 
 

@@ -21,7 +21,7 @@
             ]
           },
           {
-            "group": "Extra Features",
+            "group": "Features",
             "pages": [
               "essentials/contextual-correction",
               "essentials/formatting"
@@ -29,20 +29,10 @@
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Live Transcribe with Websockets",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "essentials/websockets",
+              "essentials/thought-detection"
             ]
           }
         ]
@@ -62,13 +52,6 @@
       }
     ],
     "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        }
-      ]
     }
   },
   "logo": {
