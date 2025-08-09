@@ -10,19 +10,34 @@ icon: "file"
 
 Your API key is used to authenticate your requests. Follow this link to grab your first API key.
 
-### Step 2: Prepare your first transcription
-
-Now, let's write a simple script to send an audio file to the API.
+### Step 2: Grab an audio file
 
 <AccordionGroup>
   <Accordion icon="file-audio" title="1. Prepare your audio file">
-    Download [this audio file](https://static.wixstatic.com/mp3/748cf5_b8310da2c11b432f86f14922a89bec02.mp3)
+    Grab an audio file of your choice, or download [this audio file](https://static.wixstatic.com/mp3/748cf5_b8310da2c11b432f86f14922a89bec02.mp3)
  and save it as `sample.mp3` in the same directory where you will save the Python script below.
 
     <Tip>Our API works best with common audio formats like MP3, WAV, M4A, OGG, WEBM, and FLAC.</Tip>
   </Accordion>
+</AccordionGroup>
 
-  <Accordion icon="language" title="2. Create the Python script">
+### Step 3: Install the SDK
+
+```python
+pip install fennec-asr
+```
+
+### Step 4: Transcribe!
+
+```python
+from fennec_asr import FennecASRClient
+print(FennecASRClient(api_key="YOUR_API_KEY").transcribe_file(r"sample.mp3"))
+```
+Don't want to use the SDK? See the example code below:
+
+<AccordionGroup>
+
+  <Accordion icon="language" title="API Example Code">
     Create a new file named `quickstart.py`. Copy and paste the code below into it.
 
     This script submits your `sample.mp3` file, waits for the transcription to complete, and then prints the final text.
@@ -93,20 +108,6 @@ Now, let's write a simple script to send an audio file to the API.
     ```
   </Accordion>
 </AccordionGroup>
-
-### Step 3: Run it
-
-You're ready to go!
-
-<Accordion icon="rocket" title="Run the script">
-  1.  Open your terminal in the directory containing `quickstart.py` and `sample.mp3`.
-  2.  Run the script:
-        ```bash
-        python quickstart.py
-        ```
-  3.  Watch as the script polls for the status and finally prints your transcript!
-
-</Accordion>
 
 ## Next Steps
 
