@@ -18,8 +18,6 @@ The **Thought Detection** feature solves this by analyzing the semantic and voca
 2.  As you stream audio, the server transcribes it internally but **does not** immediately send back a transcript after every pause. Instead, it buffers these transcripts and keeps them as one longer string.
 3.  Only when the model determines a thought is complete does the server send a single message of type `complete_thought` containing the full text of that idea.
 
-
-
 ### Enabling the Feature
 
 Activation is controlled by a single URL parameter.
@@ -27,6 +25,11 @@ Activation is controlled by a single URL parameter.
 <ParamField query="detect_thoughts" type="boolean" default="false">
   Set this to `true` in the WebSocket connection URL to enable server-side thought detection.
 </ParamField>
+
+### Install the SDK mic addon
+```python
+pip install fennec-asr[mic]
+```
 
 ### Python SDK Example
 ```python An SDK Example (mic_ws_continuous_thought_detection_sdk.py)
@@ -95,7 +98,7 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
 
         ENABLE_THOUGHT_DETECTION = True
 
-        BASE_URL = "wss://asr-api-hso0.onrender.com/api/v1/transcribe/stream"
+        BASE_URL = "wss://api.fennec-asr.com/api/v1/transcribe/stream"
         API_KEY = "YOUR_API_KEY"
 
         WEBSOCKET_URL = f"{BASE_URL}?api_key={API_KEY}"
@@ -191,7 +194,7 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
 
         const ENABLE_THOUGHT_DETECTION = true;
 
-        const WS_BASE = "wss://asr-api-hso0.onrender.com/api/v1/transcribe/stream";
+        const WS_BASE = "wss://api.fennec-asr.com/api/v1/transcribe/stream";
         // Prefer env var if available; falls back to placeholder to mirror the Python example.
         const API_KEY = process.env.FENNEC_API_KEY || "YOUR_API_KEY";
 

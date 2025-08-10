@@ -33,7 +33,7 @@ Don't want to use the SDK? See the example code below:
         import json
         import time
 
-        BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+        BASE_URL = "https://api.fennec-asr.com/api/v1"
         API_KEY = "YOUR_API_KEY_HERE"
         AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
         POLL_INTERVAL_SECONDS = 3
@@ -90,7 +90,7 @@ Don't want to use the SDK? See the example code below:
         #!/usr/bin/env node
         "use strict";
 
-        const BASE = "https://asr-api-hso0.onrender.com/api/v1";
+        const BASE = "https://api.fennec-asr.com/api/v1";
         const KEY = process.env.ASR_API_KEY;
         const AUDIO = process.argv[2] || "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg";
         const INTERVAL = 3000, MAX = 300000;

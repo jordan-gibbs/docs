@@ -20,6 +20,11 @@ The process is straightforward:
 
 The following example uses your machine's microphone as the audio source.
 
+### Install the SDK mic addon
+```python
+pip install fennec-asr[mic]
+```
+
 ### Python SDK Example
 ```python An SDK Example (mic_ws_continuous_sdk.py)
 import os, asyncio
@@ -79,7 +84,7 @@ if __name__ == "__main__":
         import websockets
 
         # --- API Configuration ---
-        BASE_URL = "wss://asr-api-hso0.onrender.com/api/v1/transcribe/stream"
+        BASE_URL = "wss://api.fennec-asr.com/api/v1/transcribe/stream"
         API_KEY = "YOUR_API_KEY_HERE"
         WEBSOCKET_URL = f"{BASE_URL}?api_key={API_KEY}"
 
@@ -189,7 +194,7 @@ if __name__ == "__main__":
 
         require("dotenv").config();
 
-        const WS_BASE = "wss://asr-api-hso0.onrender.com/api/v1/transcribe/stream";
+        const WS_BASE = "wss://api.fennec-asr.com/api/v1/transcribe/stream";
         const KEY = process.env.FENNEC_API_KEY;
         if (!KEY) {
           console.error("Set FENNEC_API_KEY in your environment (or .env).");

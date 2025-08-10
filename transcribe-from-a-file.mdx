@@ -39,112 +39,112 @@ Don't want to use the SDK? See the example code below:
 
   <Accordion icon="language" title="Example Code">
     <CodeGroup dropdown>
-      ```python quickstart.py
-        import os
-        import time
-        import requests
+    ```python quickstart.py
+    import os
+    import time
+    import requests
 
-        BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
-        API_KEY = "YOUR_API_KEY_HERE" # 👈 Paste your API key here
-        AUDIO_PATH = "sample.mp3"
-        POLL_INTERVAL_S = 3
+    BASE_URL = "https://api.fennec-asr.com/api/v1"
+    API_KEY = "YOUR_API_KEY_HERE" # 👈 Paste your API key here
+    AUDIO_PATH = "sample.mp3"
+    POLL_INTERVAL_S = 3
 
-        def transcribe_audio():
-            if not os.path.exists(AUDIO_PATH):
-                print(f"❌ Error: Audio file not found at '{AUDIO_PATH}'.")
-                print("   Please make sure the audio file is in the same directory as this script.")
-                return
+    def transcribe_audio():
+        if not os.path.exists(AUDIO_PATH):
+            print(f"❌ Error: Audio file not found at '{AUDIO_PATH}'.")
+            print("   Please make sure the audio file is in the same directory as this script.")
+            return
 
-            if "YOUR_API_KEY_HERE" in API_KEY:
-                print("❌ Error: Please replace 'YOUR_API_KEY_HERE' with your actual API key.")
-                return
+        if "YOUR_API_KEY_HERE" in API_KEY:
+            print("❌ Error: Please replace 'YOUR_API_KEY_HERE' with your actual API key.")
+            return
 
-            headers = {"X-API-Key": API_KEY}
+        headers = {"X-API-Key": API_KEY}
 
-            with open(AUDIO_PATH, "rb") as audio_file:
-                files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
+        with open(AUDIO_PATH, "rb") as audio_file:
+            files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
 
-                print(f"Submitting '{AUDIO_PATH}' for transcription...")
-                try:
-                    # 1. Submit the job
-                    submit_response = requests.post(f"{BASE_URL}/transcribe", headers=headers, files=files)
-                    submit_response.raise_for_status()
-                    job_id = submit_response.json().get("job_id")
-                    print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+            print(f"Submitting '{AUDIO_PATH}' for transcription...")
+            try:
+                # 1. Submit the job
+                submit_response = requests.post(f"{BASE_URL}/transcribe", headers=headers, files=files)
+                submit_response.raise_for_status()
+                job_id = submit_response.json().get("job_id")
+                print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
 
-                    # 2. Poll for the result
-                    status_url = f"{BASE_URL}/transcribe/status/{job_id}"
-                    while True:
-                        status_response = requests.get(status_url, headers=headers)
-                        status_response.raise_for_status()
-                        data = status_response.json()
-                        status = data.get("status")
+                # 2. Poll for the result
+                status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+                while True:
+                    status_response = requests.get(status_url, headers=headers)
+                    status_response.raise_for_status()
+                    data = status_response.json()
+                    status = data.get("status")
 
-                        if status == "completed":
-                            print("\n🎉 Transcription Complete!")
-                            print("-" * 25)
-                            print(data.get("transcript"))
-                            print("-" * 25)
-                            break
-                        elif status == "failed":
-                            print("\n❌ Transcription failed.")
-                            print("Error:", data.get("transcript"))
-                            break
-                        else:
-                            print(f"  Current status: '{status}'... waiting.")
-                            time.sleep(POLL_INTERVAL_S)
+                    if status == "completed":
+                        print("\n🎉 Transcription Complete!")
+                        print("-" * 25)
+                        print(data.get("transcript"))
+                        print("-" * 25)
+                        break
+                    elif status == "failed":
+                        print("\n❌ Transcription failed.")
+                        print("Error:", data.get("transcript"))
+                        break
+                    else:
+                        print(f"  Current status: '{status}'... waiting.")
+                        time.sleep(POLL_INTERVAL_S)
 
-                except requests.exceptions.RequestException as e:
-                    print(f"An error occurred: {e}")
-                    if e.response:
-                        print(f"Response Body: {e.response.text}")
+            except requests.exceptions.RequestException as e:
+                print(f"An error occurred: {e}")
+                if e.response:
+                    print(f"Response Body: {e.response.text}")
 
-        # --- Run the script ---
-        if __name__ == "__main__":
-            transcribe_audio()
-      ```
-      ``` ts quickstart.ts
-        #!/usr/bin/env node
-        "use strict";
+    # --- Run the script ---
+    if __name__ == "__main__":
+        transcribe_audio()
+    ```
+    ``` ts quickstart.ts
+    #!/usr/bin/env node
+    "use strict";
 
-        const BASE = "https://asr-api-hso0.onrender.com/api/v1";
-        const KEY = process.env.ASR_API_KEY;
-        const file = process.argv[2] || "sample.mp3";
-        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const BASE = "https://api.fennec-asr.com/api/v1";
+    const KEY = process.env.ASR_API_KEY;
+    const file = process.argv[2] || "sample.mp3";
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-        (async () => {
-          if (!KEY) throw new Error("Set ASR_API_KEY");
-          const { readFile } = require("fs/promises");
-          const { basename } = require("path");
-          const form = new FormData();
-          form.append("audio", new Blob([await readFile(file)], { type: "audio/mpeg" }), basename(file));
+    (async () => {
+      if (!KEY) throw new Error("Set ASR_API_KEY");
+      const { readFile } = require("fs/promises");
+      const { basename } = require("path");
+      const form = new FormData();
+      form.append("audio", new Blob([await readFile(file)], { type: "audio/mpeg" }), basename(file));
 
-          const sub = await fetch(`${BASE}/transcribe`, {
-            method: "POST",
-            headers: { "X-API-Key": KEY },
-            body: form,
-            duplex: "half",
-          }).then((r) => r.json());
+      const sub = await fetch(`${BASE}/transcribe`, {
+        method: "POST",
+        headers: { "X-API-Key": KEY },
+        body: form,
+        duplex: "half",
+      }).then((r) => r.json());
 
-          if (!sub?.job_id) throw new Error("No job_id");
-          for (;;) {
-            const s = await fetch(`${BASE}/transcribe/status/${sub.job_id}`, {
-              headers: { "X-API-Key": KEY },
-            }).then((r) => r.json());
+      if (!sub?.job_id) throw new Error("No job_id");
+      for (;;) {
+        const s = await fetch(`${BASE}/transcribe/status/${sub.job_id}`, {
+          headers: { "X-API-Key": KEY },
+        }).then((r) => r.json());
 
-            if (s.status === "completed") return void console.log(s.transcript || "");
-            if (s.status === "failed") {
-              console.error("Failed:", s.transcript || "");
-              process.exit(1);
-            }
-            await wait(3000);
-          }
-        })().catch((e) => {
-          console.error(e.message || e);
+        if (s.status === "completed") return void console.log(s.transcript || "");
+        if (s.status === "failed") {
+          console.error("Failed:", s.transcript || "");
           process.exit(1);
-        });
+        }
+        await wait(3000);
+      }
+    })().catch((e) => {
+      console.error(e.message || e);
+      process.exit(1);
+    });
 
-      ```
+    ```
    </CodeGroup>
   </Accordion>
 </AccordionGroup>

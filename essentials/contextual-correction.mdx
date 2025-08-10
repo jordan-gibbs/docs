@@ -120,7 +120,7 @@ The fennec fox is commonly trapped for exhibition or sale in north africa, and i
     import requests
     import json
 
-    BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+    BASE_URL = "https://api.fennec-asr.com/api/v1"
     API_KEY = "YOUR_API_KEY_HERE"
     AUDIO_PATH = "sample.mp3"
     POLL_INTERVAL_S = 3
@@ -185,7 +185,7 @@ The fennec fox is commonly trapped for exhibition or sale in north africa, and i
     #!/usr/bin/env node
     "use strict";
 
-    const BASE = "https://asr-api-hso0.onrender.com/api/v1";
+    const BASE = "https://api.fennec-asr.com/api/v1";
     const KEY = process.env.ASR_API_KEY;
     const file = process.argv[2] || "sample.mp3";
     const CONTEXT =
@@ -243,7 +243,7 @@ The fennec fox is commonly trapped for exhibition or sale in north africa, and i
         import json
         import requests
 
-        BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+        BASE_URL = "https://api.fennec-asr.com/api/v1"
         API_KEY = "YOUR_API_KEY_HERE"  # <-- put your API key here
         AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
 
@@ -344,7 +344,7 @@ The fennec fox is commonly trapped for exhibition or sale in north africa, and i
         #!/usr/bin/env node
         "use strict";
 
-        const BASE = "https://asr-api-hso0.onrender.com/api/v1";
+        const BASE = "https://api.fennec-asr.com/api/v1";
         const KEY = process.env.ASR_API_KEY;
         const url =
           process.argv[2] ||
