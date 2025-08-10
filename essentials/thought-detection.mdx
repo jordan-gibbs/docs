@@ -28,109 +28,312 @@ Activation is controlled by a single URL parameter.
   Set this to `true` in the WebSocket connection URL to enable server-side thought detection.
 </ParamField>
 
-## Code Sample
+### Python SDK Example
+```python An SDK Example (mic_ws_continuous_thought_detection_sdk.py)
+import os, asyncio
+from dotenv import load_dotenv
+from fennec_asr import Realtime
+from fennec_asr.mic import stream_microphone
 
-This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set to `true`, it automatically adjusts the WebSocket URL and the VAD settings, then listens for the specific `complete_thought` message from the server.
+load_dotenv()
 
-```python A Full Example (mic_ws_thought_detection.py)
-import asyncio
-import json
-import signal
-import sounddevice as sd
-import websockets
-
-# --- Feature Flag ---
-# Set to True to enable server-side thought completion detection.
-ENABLE_THOUGHT_DETECTION = True
-
-# --- API Configuration ---
-BASE_URL = "wss://asr-api-hso0.onrender.com/api/v1/transcribe/stream"
-API_KEY = "YOUR_API_KEY_HERE"
-
-# --- Build the WebSocket URL ---
-WEBSOCKET_URL = f"{BASE_URL}?api_key={API_KEY}"
-if ENABLE_THOUGHT_DETECTION:
-    # Append the query parameter to activate the server-side feature
-    WEBSOCKET_URL += "&detect_thoughts=true"
-
-# --- Audio Configuration ---
-SAMPLE_RATE = 16_000
+API_KEY = os.getenv("FENNEC_API_KEY")
+SAMPLE_RATE = 16000
 CHANNELS = 1
-DTYPE = "int16"
-CHUNK_MS = 100
-FRAMES_PER_CHUNK = int(SAMPLE_RATE * (CHUNK_MS / 1000.0))
+CHUNK_MS = 32
+SINGLE_UTTERANCE = False
+DETECT_THOUGHTS = True
 
-# --- VAD Configuration ---
-START_MSG = {
-    "type": "start",
-    "sample_rate": 16000,
-    "channels": 1,
-    "single_utterance": False,  # Keep connection open after each transcript
-    "vad": {
-        "threshold": 0.45,  # VAD sensitivity. Lower is more sensitive. 0.5 is a good baseline.
-        "min_silence_ms": 400,  # Milliseconds of silence to trigger an End-of-Speech event.
-        "speech_pad_ms": 200,  # Milliseconds of audio to include before speech starts.
-        "final_silence_s": 0,  # Additional silence to wait for at the end.
-        "start_trigger_ms": 30,  # How many ms of speech are needed to start transcribing.
-        "min_voiced_ms": 100,  # Utterance is discarded if it has less than this much voiced audio.
-        "min_chars": 1,  # Discard transcript if it has fewer characters than this.
-        "min_words": 1,  # Discard transcript if it has fewer words than this.
-        "amp_extend": 1200  # A non-speech noise can extend utterance, but not start it.
-    }
+VAD = {
+    "threshold": 0.45,
+    "min_silence_ms": 100,
+    "speech_pad_ms": 200,
+    "final_silence_s": 0.1,
+    "start_trigger_ms": 36,
+    "min_voiced_ms": 48,
+    "min_chars": 1,
+    "min_words": 1,
+    "amp_extend": 1200,
+    "force_decode_ms": 0,
+    "debug": False,
 }
 
-# --- Graceful Shutdown & Networking ---
-shutdown_event = asyncio.Event()
-
-def _handle_sigint(*_):
-    shutdown_event.set()
-
-async def audio_sender(ws, stream):
-    print("\n🎙️  Streaming mic… speak a full thought and pause. (Ctrl+C to stop)", flush=True)
-    while not shutdown_event.is_set():
-        try:
-            data, _ = await asyncio.to_thread(stream.read, FRAMES_PER_CHUNK)
-            await ws.send(bytes(data))
-        except websockets.exceptions.ConnectionClosed:
-            break
-    try:
-        if not ws.closed: await ws.send('{"type":"eos"}')
-    except websockets.exceptions.ConnectionClosed:
-        pass
-
-async def message_receiver(ws):
-    """Listens for messages and handles them based on the selected mode."""
-    async for msg in ws:
-        data = json.loads(msg)
-        # In this mode, we ONLY care about messages of type 'complete_thought'
-        if data.get("type") == "complete_thought":
-            text = data.get("text", "")
-            print(f"\n✅ Thought Complete: {text}", flush=True)
-
 async def main():
-    print(f"Connecting to: {WEBSOCKET_URL}")
-    try:
-        async with websockets.connect(WEBSOCKET_URL, max_size=None, ping_interval=5) as ws:
-            await ws.send(json.dumps(START_MSG))
-            print("✅ WebSocket connected and configured.")
+    if not API_KEY:
+        raise RuntimeError("Set FENNEC_API_KEY")
 
-            with sd.RawInputStream(
-                samplerate=SAMPLE_RATE, channels=CHANNELS, dtype=DTYPE, blocksize=FRAMES_PER_CHUNK
-            ) as stream:
-                sender = asyncio.create_task(audio_sender(ws, stream))
-                receiver = asyncio.create_task(message_receiver(ws))
-                await asyncio.wait([sender, receiver], return_when=asyncio.FIRST_COMPLETED)
-    except Exception as e:
-        print(f"❌ An error occurred: {e}")
+    rt = (
+        Realtime(API_KEY, sample_rate=SAMPLE_RATE, channels=CHANNELS, detect_thoughts=DETECT_THOUGHTS)
+        .on("open",    lambda: print("✅ ready"))
+        .on("thought", lambda t: print("🧠", t))
+        .on("error",   lambda e: print("❌", e))
+        .on("close",   lambda: print("👋 closed"))
+    )
+
+    rt._start_msg["single_utterance"] = SINGLE_UTTERANCE
+    rt._start_msg["vad"] = VAD
+
+    async with rt:
+        await stream_microphone(rt, samplerate=SAMPLE_RATE, channels=CHANNELS, chunk_ms=CHUNK_MS)
 
 if __name__ == "__main__":
-    if sd.query_devices(kind='input'):
-        signal.signal(signal.SIGINT, _handle_sigint)
-        asyncio.run(main())
-    else:
-        print("\n❌ No input microphone found.")
-
+    asyncio.run(main())
 ```
+
+<Accordion icon="language" title="Code Samples">
+This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set to `true`, it automatically adjusts the WebSocket URL and the VAD settings, then listens for the specific `complete_thought` message from the server.
+
+    <CodeGroup dropdown>
+
+        ```python A Full Example (mic_ws_thought_detection.py)
+        import asyncio
+        import json
+        import signal
+        import sounddevice as sd
+        import websockets
+        import os
+
+        ENABLE_THOUGHT_DETECTION = True
+
+        BASE_URL = "wss://asr-api-hso0.onrender.com/api/v1/transcribe/stream"
+        API_KEY = "YOUR_API_KEY"
+
+        WEBSOCKET_URL = f"{BASE_URL}?api_key={API_KEY}"
+        if ENABLE_THOUGHT_DETECTION:
+            WEBSOCKET_URL += "&detect_thoughts=true"
+
+        SAMPLE_RATE = 16_000
+        CHANNELS = 1
+        DTYPE = "int16"
+        CHUNK_MS = 100
+        FRAMES_PER_CHUNK = int(SAMPLE_RATE * (CHUNK_MS / 1000.0))
+
+        START_MSG = {
+            "type": "start",
+            "sample_rate": 16000,
+            "channels": 1,
+            "single_utterance": False,  # Keep connection open after each transcript
+            "vad": {
+                "threshold": 0.45,  # VAD sensitivity. Lower is more sensitive. 0.5 is a good baseline.
+                "min_silence_ms": 400,  # Milliseconds of silence to trigger an End-of-Speech event.
+                "speech_pad_ms": 200,  # Milliseconds of audio to include before speech starts.
+                "final_silence_s": 0,  # Additional silence to wait for at the end.
+                "start_trigger_ms": 30,  # How many ms of speech are needed to start transcribing.
+                "min_voiced_ms": 100,  # Utterance is discarded if it has less than this much voiced audio.
+                "min_chars": 1,  # Discard transcript if it has fewer characters than this.
+                "min_words": 1,  # Discard transcript if it has fewer words than this.
+                "amp_extend": 1200  # A non-speech noise can extend utterance, but not start it.
+            }
+        }
+
+        shutdown_event = asyncio.Event()
+
+        def _handle_sigint(*_):
+            shutdown_event.set()
+
+        async def audio_sender(ws, stream):
+            print("\n🎙️  Streaming mic… speak a full thought and pause. (Ctrl+C to stop)", flush=True)
+            while not shutdown_event.is_set():
+                try:
+                    data, _ = await asyncio.to_thread(stream.read, FRAMES_PER_CHUNK)
+                    await ws.send(bytes(data))
+                except websockets.exceptions.ConnectionClosed:
+                    break
+            try:
+                if not ws.closed: await ws.send('{"type":"eos"}')
+            except websockets.exceptions.ConnectionClosed:
+                pass
+
+        async def message_receiver(ws):
+            """Listens for messages and handles them based on the selected mode."""
+            async for msg in ws:
+                data = json.loads(msg)
+                if data.get("type") == "complete_thought":
+                    text = data.get("text", "")
+                    print(f"\n✅ Thought Complete: {text}", flush=True)
+
+        async def main():
+            print(f"Connecting to: {WEBSOCKET_URL}")
+            try:
+                async with websockets.connect(WEBSOCKET_URL, max_size=None, ping_interval=5) as ws:
+                    await ws.send(json.dumps(START_MSG))
+                    print("✅ WebSocket connected and configured.")
+
+                    with sd.RawInputStream(
+                        samplerate=SAMPLE_RATE, channels=CHANNELS, dtype=DTYPE, blocksize=FRAMES_PER_CHUNK
+                    ) as stream:
+                        sender = asyncio.create_task(audio_sender(ws, stream))
+                        receiver = asyncio.create_task(message_receiver(ws))
+                        await asyncio.wait([sender, receiver], return_when=asyncio.FIRST_COMPLETED)
+            except Exception as e:
+                print(f"❌ An error occurred: {e}")
+
+        if __name__ == "__main__":
+            if sd.query_devices(kind='input'):
+                signal.signal(signal.SIGINT, _handle_sigint)
+                asyncio.run(main())
+            else:
+                print("\n❌ No input microphone found.")
+        ```
+        ```ts A Full Example (mic_ws_thought_detection.ts)
+        #!/usr/bin/env node
+        "use strict";
+
+        /**
+         * Streams microphone audio to the ASR WebSocket API with "thought detection".
+         * Prints a message whenever a complete thought is detected. (Ctrl+C to stop)
+         *
+         * Requires:
+         *   - Node 18+ (for global fetch/Blob/FormData/AbortSignal)
+         *   - npm i ws mic
+         *   - Set your API key below or via env (FENNEC_API_KEY)
+         */
+
+        const ENABLE_THOUGHT_DETECTION = true;
+
+        const WS_BASE = "wss://asr-api-hso0.onrender.com/api/v1/transcribe/stream";
+        // Prefer env var if available; falls back to placeholder to mirror the Python example.
+        const API_KEY = process.env.FENNEC_API_KEY || "YOUR_API_KEY";
+
+        if (!API_KEY || API_KEY === "YOUR_API_KEY") {
+          console.warn("⚠️  Using placeholder API key. Set FENNEC_API_KEY for real requests.");
+        }
+
+        let WEBSOCKET_URL = `${WS_BASE}?api_key=${encodeURIComponent(API_KEY)}`;
+        if (ENABLE_THOUGHT_DETECTION) WEBSOCKET_URL += "&detect_thoughts=true";
+
+        // --- Audio Configuration ---
+        const SAMPLE_RATE: number = 16_000;
+        const CHANNELS: number = 1;
+        const CHUNK_MS: number = 100;
+        const DTYPE_BYTES: number = 2; // int16 -> 2 bytes/sample
+        const FRAMES_PER_CHUNK: number = Math.floor(SAMPLE_RATE * (CHUNK_MS / 1000));
+        const CHUNK_BYTES: number = FRAMES_PER_CHUNK * CHANNELS * DTYPE_BYTES;
+
+        // --- WebSocket Start Message (mirrors Python) ---
+        const START_MSG = {
+          type: "start",
+          sample_rate: 16000,
+          channels: 1,
+          single_utterance: false,
+          vad: {
+            threshold: 0.45,
+            min_silence_ms: 400,
+            speech_pad_ms: 200,
+            final_silence_s: 0,
+            start_trigger_ms: 30,
+            min_voiced_ms: 100,
+            min_chars: 1,
+            min_words: 1,
+            amp_extend: 1200,
+          },
+        };
+
+        (async () => {
+          const WebSocket = require("ws");
+          const mic = require("mic");
+
+          console.log(`Connecting to: ${WEBSOCKET_URL}`);
+
+          const ws = new WebSocket(WEBSOCKET_URL, {
+            perMessageDeflate: false,
+            maxPayload: 0,
+          });
+
+          // Graceful shutdown
+          let shuttingDown = false;
+          const shutdown = (micInstance?: any) => {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            try {
+              if (ws.readyState === WebSocket.OPEN) ws.send('{"type":"eos"}');
+            } catch {}
+            try {
+              micInstance?.stop();
+            } catch {}
+            try {
+              ws.close();
+            } catch {}
+          };
+          process.on("SIGINT", () => shutdown());
+
+          ws.on("open", async () => {
+            try {
+              await ws.send(JSON.stringify(START_MSG));
+              console.log("✅ WebSocket connected and configured.");
+
+              // Configure mic: raw 16kHz, mono, 16-bit LE PCM
+              const micInstance = mic({
+                rate: String(SAMPLE_RATE),
+                channels: String(CHANNELS),
+                bitwidth: "16",
+                encoding: "signed-integer",
+                endian: "little",
+                fileType: "raw",
+                exitOnSilence: 0,
+                device: process.env.MIC_DEVICE || undefined, // optional override
+              });
+
+              const micStream = micInstance.getAudioStream();
+              let buffer: Buffer = Buffer.alloc(0);
+
+              console.log("\n🎙️  Streaming mic… speak a full thought and pause. (Ctrl+C to stop)");
+
+              micStream.on("data", (chunk: Buffer) => {
+                buffer = Buffer.concat([buffer, chunk]);
+                while (buffer.length >= CHUNK_BYTES && ws.readyState === WebSocket.OPEN) {
+                  const slice = buffer.subarray(0, CHUNK_BYTES);
+                  ws.send(slice); // binary PCM chunk
+                  buffer = buffer.subarray(CHUNK_BYTES);
+                }
+              });
+
+              micStream.on("error", (err: any) => {
+                console.error("Mic error:", err?.message || err);
+              });
+
+              ws.on("message", (msg: Buffer) => {
+                try {
+                  const data = JSON.parse(msg.toString("utf8"));
+                  if (data?.type === "complete_thought") {
+                    const text: string = data.text || "";
+                    console.log(`\n✅ Thought Complete: ${text}`);
+                  }
+                } catch {
+                  // ignore non-JSON
+                }
+              });
+
+              ws.on("close", () => shutdown(micInstance));
+              ws.on("error", (e: any) => {
+                console.error("WebSocket error:", e?.message || e);
+                shutdown(micInstance);
+              });
+
+              // Try starting mic; if it immediately errors, surface a helpful message.
+              try {
+                micInstance.start();
+              } catch (e: any) {
+                console.error("\n❌ Failed to access microphone. Ensure an input device is available.");
+                shutdown(micInstance);
+              }
+            } catch (e: any) {
+              console.error("Startup error:", e?.message || e);
+              shutdown();
+            }
+          });
+
+          ws.on("error", (e: any) => {
+            console.error("WebSocket error (pre-open):", e?.message || e);
+          });
+        })();
+
+        ```
+    </CodeGroup>
+</Accordion>
+
+
+
 ## Example Interaction
 Here is how the experience differs when speaking the same sentence: "I was thinking about the quarterly report... and it seems like the numbers for Q3 are a bit lower than we expected."
 
@@ -156,3 +359,7 @@ The application receives a single, semantically complete transcript after the us
 ```
 </Card>
 </CardGroup>
+### Why is this useful?
+Thought Detection helps AI voice agents to be more intuitive and realistic. It's annoying for users to be interrupted by an overly enthusiastic LLM, and this is a simple solution to eliminate that from the start.
+
+It's also useful for live transcriptions that have beautiful spacing out of the box. No more blocks of text!

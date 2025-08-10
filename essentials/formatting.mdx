@@ -1,16 +1,14 @@
 ---
 title: "Automatic Formatting"
-description: "Automatically add paragraphs and line breaks to your transcripts based on speech pauses to dramatically improve readability."
+description: "Automatically add paragraphs and line breaks to your transcripts to improve readability."
 icon: "align-left"
 ---
 
-Raw ASR output is often a dense wall of text, making it difficult to read and understand the flow of a conversation. The Automatic Formatting feature solves this by intelligently inserting newlines (`\n`) and double newlines (`\n\n`) into your transcript based on the duration of pauses between spoken words.
+Raw ASR output is often a dense wall of text, making it difficult to read and understand the flow of a conversation. The Automatic Formatting feature solves this by intelligently inserting newlines and double newlines into your transcript based on the duration of pauses between spoken words.
 
 This transforms a hard-to-read block of text into a well-structured, easy-to-scan document.
 
 ## How It Works
-
-When you enable formatting, our API analyzes the word-level timestamps returned by the transcription model. You provide thresholds (in seconds) that tell the API when to insert line breaks.
 
 The feature is controlled by a single `formatting` parameter, which accepts a JSON string containing one or both of the following keys:
 
@@ -28,210 +26,27 @@ The feature is controlled by a single `formatting` parameter, which accepts a JS
 
 ## How to Use It
 
-To use this feature, you'll add the `formatting` field to your `/transcribe` request. The following example builds on the script from the Quickstart guide.
+To use this feature, you'll add the `formatting` field to your request.
 
-### 1. Define your formatting rules
+## SDK Example
 
-In your Python script, create a dictionary with your desired pause thresholds.
+``` python quickstart_format.py
+from fennec_asr import FennecASRClient
 
-```python
-# Define the formatting rules in a Python dictionary
-# Add a newline for any pause over 0.8 seconds
-# Add a new paragraph for any pause over 1.5 seconds
-formatting_options = {
-    "newline_pause_threshold": 0.8,
-    "double_newline_pause_threshold": 1.5
-}
-```
-### 2. Convert the rules to a JSON string
-Use Python's json library to serialize the dictionary into a string.
+asr_client = FennecASRClient(api_key="YOUR_API_KEY")
 
-```python
-import json
-
-# The API expects a JSON string, so we serialize the dictionary
-formatting_string = json.dumps(formatting_options)
-```
-
-### 3. Send the request
-Pass the serialized string in the data part of your requests.post call.
-
-```python A Full Example (quickstart_format.py)
-import os
-import time
-import requests
-import json
-
-BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
-API_KEY = "YOUR_API_KEY_HERE"
-AUDIO_PATH = "sample.mp3"
-POLL_INTERVAL_S = 3
-
-# 1. Define your formatting rules as a Python dictionary.
 formatting_options = {
     "newline_pause_threshold": 0.8,
     "double_newline_pause_threshold": 1.5
 }
 
-def transcribe_with_formatting():
-    headers = {"X-API-Key": API_KEY}
-    with open(AUDIO_PATH, "rb") as audio_file:
-        files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
+transcription = asr_client.transcribe_file(
+    file_path="sample.mp3",
+    formatting=formatting_options,
+)
 
-        form_data = {
-            "formatting": json.dumps(formatting_options)
-        }
-
-        print("--- Submitting Transcription with Formatting ---")
-        print(f"Formatting Rules: {form_data['formatting']}")
-        print("----------------------------------------------")
-
-        try:
-            # Add the 'data' parameter to send the new form field.
-            submit_response = requests.post(
-                f"{BASE_URL}/transcribe",
-                headers=headers,
-                files=files,
-                data=form_data # <-- Add the formatting rules here
-            )
-            submit_response.raise_for_status()
-            job_id = submit_response.json().get("job_id")
-            print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
-
-            status_url = f"{BASE_URL}/transcribe/status/{job_id}"
-            while True:
-                status_response = requests.get(status_url, headers=headers)
-                status_response.raise_for_status()
-                data = status_response.json()
-                status = data.get("status")
-
-                if status == "completed":
-                    print("\n🎉 Transcription Complete!")
-                    print("-" * 25)
-                    print(data.get("transcript"))
-                    print("-" * 25)
-                    break
-                elif status == "failed":
-                    print("\n❌ Transcription failed. Error:", data.get("transcript"))
-                    break
-                else:
-                    print(f"  Current status: '{status}'... waiting.")
-                    time.sleep(POLL_INTERVAL_S)
-
-        except requests.exceptions.RequestException as e:
-            print(f"An error occurred: {e}")
-
-if __name__ == "__main__":
-    transcribe_with_formatting()
+print(transcription)
 ```
-
-<AccordionGroup>
-  <Accordion icon="link" title="URL Example">
-
-    ```python URL Sample Script (quickstart_formatting_url.py)
-    import time
-    import json
-    import requests
-
-    BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
-    API_KEY = "YOUR_API_KEY_HERE"
-    AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
-
-    POLL_INTERVAL_SECONDS = 5
-    MAX_WAIT_SECONDS = 300
-
-    formatting_options = {
-        "newline_pause_threshold": 0.6,
-        "double_newline_pause_threshold": 0.8
-    }
-
-
-    def submit_job():
-        headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
-        # The 'formatting' value MUST be a JSON-formatted string.
-        payload = {
-            "audio": AUDIO_URL,
-            "formatting": json.dumps(formatting_options)
-        }
-
-        print("--- Submitting URL Transcription with Formatting ---")
-        print(f"Audio URL: {AUDIO_URL}")
-        print(f"Formatting: {payload['formatting']}")
-        print("----------------------------------------------------")
-
-        resp = requests.post(f"{BASE_URL}/transcribe/url",
-                             headers=headers,
-                             json=payload,
-                             timeout=60)
-        resp.raise_for_status()
-        job_id = resp.json().get("job_id")
-        if not job_id:
-            raise RuntimeError("No job_id returned from submit endpoint.")
-        print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
-        return job_id
-
-
-    def poll_job(job_id):
-        headers = {"X-API-Key": API_KEY}
-        status_url = f"{BASE_URL}/transcribe/status/{job_id}"
-
-        start = time.monotonic()
-        while time.monotonic() - start < MAX_WAIT_SECONDS:
-            print("Polling for status...")
-            try:
-                resp = requests.get(status_url, headers=headers, timeout=30)
-                if resp.status_code != 200:
-                    print(f"  Error polling status: HTTP {resp.status_code}")
-                    time.sleep(POLL_INTERVAL_SECONDS)
-                    continue
-
-                data = resp.json()
-                status = data.get("status")
-                print(f"  Current status: '{status}'")
-
-                if status == "completed":
-                    return data
-                if status == "failed":
-                    return data
-            except requests.exceptions.RequestException as e:
-                print(f"  Polling error: {e}")
-
-            time.sleep(POLL_INTERVAL_SECONDS)
-
-        return {"status": "timeout", "transcript": None}
-
-
-    def main():
-        try:
-            job_id = submit_job()
-            result = poll_job(job_id)
-
-            status = result.get("status")
-            if status == "completed":
-                transcript = result.get("transcript") or ""
-                print("\n🎉 Transcription complete!")
-                print("-" * 60)
-                print(transcript)
-                print("-" * 60)
-            elif status == "failed":
-                print("\n❌ Transcription failed.")
-                print("Error:", result.get("transcript"))
-            else:
-                print("\n⏰ Polling timed out.")
-        except requests.exceptions.RequestException as e:
-            print(f"An error occurred: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-
-    if __name__ == "__main__":
-        main()
-    ```
-
-
-  </Accordion>
-</AccordionGroup>
-
 
 ## Example Result
 
@@ -255,4 +70,401 @@ Applying formatting makes a huge difference in readability.
     ```
   </Card>
 </CardGroup>
+
+<Accordion icon="language" title="Example Code">
+
+    ### 1. Define your formatting rules
+
+    In your script, create a dictionary with your desired pause thresholds.
+
+    <CodeGroup dropdown>
+        ```python
+        # Define the formatting rules in a Python dictionary
+        # Add a newline for any pause over 0.8 seconds
+        # Add a new paragraph for any pause over 1.5 seconds
+        formatting_options = {
+            "newline_pause_threshold": 0.8,
+            "double_newline_pause_threshold": 1.5
+        }
+        ```
+        ```ts
+        // 1) Define formatting rules
+        // Add a newline for any pause over 0.8 seconds
+        // Add a new paragraph for any pause over 1.5 seconds
+        export const formattingOptions = {
+          newline_pause_threshold: 0.8,
+          double_newline_pause_threshold: 1.5,
+        };
+        ```
+    </CodeGroup>
+
+    ### 2. Convert the rules to a JSON string
+    Use Python's json library to serialize the dictionary into a string.
+
+    <CodeGroup dropdown>
+        ```python
+        import json
+
+        # The API expects a JSON string, so we serialize the dictionary
+        formatting_string = json.dumps(formatting_options)
+        ```
+        ```ts
+        // 2) Serialize to a JSON string (what the API expects)
+        import type { } from "node"; // keeps this as TS; safe to remove if not needed
+
+        import { formattingOptions } from "./formattingOptions"; // or inline the object from above
+
+        export const formattingString: string = JSON.stringify(formattingOptions);
+
+        ```
+    </CodeGroup>
+
+    ### 3. Send the request
+    Pass the serialized string in the data part of your requests.post call.
+
+    <CodeGroup dropdown>
+        ```python A Full Example (quickstart_format.py)
+        import os
+        import time
+        import requests
+        import json
+
+        BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+        API_KEY = "YOUR_API_KEY_HERE"
+        AUDIO_PATH = "sample.mp3"
+        POLL_INTERVAL_S = 3
+
+        # 1. Define your formatting rules as a Python dictionary.
+        formatting_options = {
+            "newline_pause_threshold": 0.8,
+            "double_newline_pause_threshold": 1.5
+        }
+
+        def transcribe_with_formatting():
+            headers = {"X-API-Key": API_KEY}
+            with open(AUDIO_PATH, "rb") as audio_file:
+                files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
+
+                form_data = {
+                    "formatting": json.dumps(formatting_options)
+                }
+
+                print("--- Submitting Transcription with Formatting ---")
+                print(f"Formatting Rules: {form_data['formatting']}")
+                print("----------------------------------------------")
+
+                try:
+                    # Add the 'data' parameter to send the new form field.
+                    submit_response = requests.post(
+                        f"{BASE_URL}/transcribe",
+                        headers=headers,
+                        files=files,
+                        data=form_data # <-- Add the formatting rules here
+                    )
+                    submit_response.raise_for_status()
+                    job_id = submit_response.json().get("job_id")
+                    print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+
+                    status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+                    while True:
+                        status_response = requests.get(status_url, headers=headers)
+                        status_response.raise_for_status()
+                        data = status_response.json()
+                        status = data.get("status")
+
+                        if status == "completed":
+                            print("\n🎉 Transcription Complete!")
+                            print("-" * 25)
+                            print(data.get("transcript"))
+                            print("-" * 25)
+                            break
+                        elif status == "failed":
+                            print("\n❌ Transcription failed. Error:", data.get("transcript"))
+                            break
+                        else:
+                            print(f"  Current status: '{status}'... waiting.")
+                            time.sleep(POLL_INTERVAL_S)
+
+                except requests.exceptions.RequestException as e:
+                    print(f"An error occurred: {e}")
+
+        if __name__ == "__main__":
+            transcribe_with_formatting()
+        ```
+        ```ts
+        #!/usr/bin/env node
+        "use strict";
+
+        // 3) Full CLI script mirroring your Python example
+        const BASE = "https://asr-api-hso0.onrender.com/api/v1";
+        const KEY = process.env.ASR_API_KEY;
+        const file = process.argv[2] || "sample.mp3";
+
+        const formattingOptions = {
+          newline_pause_threshold: 0.8,
+          double_newline_pause_threshold: 1.5,
+        };
+
+        const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+        (async () => {
+          if (!KEY) throw new Error("Set ASR_API_KEY");
+
+          const { readFile } = require("fs/promises");
+          const { basename } = require("path");
+
+          // Build multipart form with audio + formatting JSON string
+          const form = new FormData();
+          form.append(
+            "audio",
+            new Blob([await readFile(file)], { type: "audio/mpeg" }),
+            basename(file)
+          );
+          form.append("formatting", JSON.stringify(formattingOptions));
+
+          // Submit job
+          const sub = await fetch(`${BASE}/transcribe`, {
+            method: "POST",
+            headers: { "X-API-Key": KEY },
+            body: form,
+            duplex: "half",
+          }).then((r) => r.json());
+
+          if (!sub?.job_id) throw new Error("No job_id");
+
+          // Poll until completed/failed
+          for (;;) {
+            const s = await fetch(`${BASE}/transcribe/status/${sub.job_id}`, {
+              headers: { "X-API-Key": KEY },
+            }).then((r) => r.json());
+
+            if (s.status === "completed") return void console.log(s.transcript || "");
+            if (s.status === "failed") {
+              console.error("Failed:", s.transcript || "");
+              process.exit(1);
+            }
+            await wait(3000);
+          }
+        })().catch((e) => {
+          console.error(e.message || e);
+          process.exit(1);
+        });
+
+        ```
+    </CodeGroup>
+</Accordion>
+
+<AccordionGroup>
+  <Accordion icon="link" title="URL Example">
+    <CodeGroup dropdown>
+        ```python URL Sample Script (quickstart_formatting_url.py)
+        import time
+        import json
+        import requests
+
+        BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+        API_KEY = "YOUR_API_KEY_HERE"
+        AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
+
+        POLL_INTERVAL_SECONDS = 5
+        MAX_WAIT_SECONDS = 300
+
+        formatting_options = {
+            "newline_pause_threshold": 0.6,
+            "double_newline_pause_threshold": 0.8
+        }
+
+
+        def submit_job():
+            headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+            # The 'formatting' value MUST be a JSON-formatted string.
+            payload = {
+                "audio": AUDIO_URL,
+                "formatting": json.dumps(formatting_options)
+            }
+
+            print("--- Submitting URL Transcription with Formatting ---")
+            print(f"Audio URL: {AUDIO_URL}")
+            print(f"Formatting: {payload['formatting']}")
+            print("----------------------------------------------------")
+
+            resp = requests.post(f"{BASE_URL}/transcribe/url",
+                                 headers=headers,
+                                 json=payload,
+                                 timeout=60)
+            resp.raise_for_status()
+            job_id = resp.json().get("job_id")
+            if not job_id:
+                raise RuntimeError("No job_id returned from submit endpoint.")
+            print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+            return job_id
+
+
+        def poll_job(job_id):
+            headers = {"X-API-Key": API_KEY}
+            status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+
+            start = time.monotonic()
+            while time.monotonic() - start < MAX_WAIT_SECONDS:
+                print("Polling for status...")
+                try:
+                    resp = requests.get(status_url, headers=headers, timeout=30)
+                    if resp.status_code != 200:
+                        print(f"  Error polling status: HTTP {resp.status_code}")
+                        time.sleep(POLL_INTERVAL_SECONDS)
+                        continue
+
+                    data = resp.json()
+                    status = data.get("status")
+                    print(f"  Current status: '{status}'")
+
+                    if status == "completed":
+                        return data
+                    if status == "failed":
+                        return data
+                except requests.exceptions.RequestException as e:
+                    print(f"  Polling error: {e}")
+
+                time.sleep(POLL_INTERVAL_SECONDS)
+
+            return {"status": "timeout", "transcript": None}
+
+
+        def main():
+            try:
+                job_id = submit_job()
+                result = poll_job(job_id)
+
+                status = result.get("status")
+                if status == "completed":
+                    transcript = result.get("transcript") or ""
+                    print("\n🎉 Transcription complete!")
+                    print("-" * 60)
+                    print(transcript)
+                    print("-" * 60)
+                elif status == "failed":
+                    print("\n❌ Transcription failed.")
+                    print("Error:", result.get("transcript"))
+                else:
+                    print("\n⏰ Polling timed out.")
+            except requests.exceptions.RequestException as e:
+                print(f"An error occurred: {e}")
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+
+
+        if __name__ == "__main__":
+            main()
+        ```
+        ```ts URL Sample Script (quickstart_formatting_url.ts
+        #!/usr/bin/env node
+        "use strict";
+
+        const BASE = "https://asr-api-hso0.onrender.com/api/v1";
+        const KEY = process.env.ASR_API_KEY;
+        const AUDIO_URL =
+          process.argv[2] ||
+          "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg";
+
+        const POLL_INTERVAL_MS = 5000;
+        const MAX_WAIT_MS = 300000;
+
+        const formattingOptions = {
+          newline_pause_threshold: 0.6,
+          double_newline_pause_threshold: 0.8,
+        };
+
+        const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+        (async () => {
+          if (!KEY) throw new Error("Set ASR_API_KEY");
+
+          // The 'formatting' value MUST be a JSON-formatted string.
+          const payload = {
+            audio: AUDIO_URL,
+            formatting: JSON.stringify(formattingOptions),
+          };
+
+          console.log("--- Submitting URL Transcription with Formatting ---");
+          console.log(`Audio URL: ${AUDIO_URL}`);
+          console.log(`Formatting: ${payload.formatting}`);
+          console.log("----------------------------------------------------");
+
+          const sub = await fetch(`${BASE}/transcribe/url`, {
+            method: "POST",
+            headers: {
+              "X-API-Key": KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          }).then(async (r) => {
+            if (!r.ok) {
+              throw new Error(`Submit failed: HTTP ${r.status}`);
+            }
+            return r.json();
+          });
+
+          if (!sub?.job_id) throw new Error("No job_id returned from submit endpoint.");
+          console.log(`✅ Job submitted successfully! Job ID: ${sub.job_id}\n`);
+
+          const start = Date.now();
+          const statusUrl = `${BASE}/transcribe/status/${sub.job_id}`;
+
+          for (;;) {
+            console.log("Polling for status...");
+            try {
+              const s = await fetch(statusUrl, {
+                headers: { "X-API-Key": KEY },
+              }).then(async (r) => {
+                if (!r.ok) {
+                  console.log(`  Error polling status: HTTP ${r.status}`);
+                  return null;
+                }
+                return r.json();
+              });
+
+              if (s) {
+                const status = s.status;
+                console.log(`  Current status: '${status}'`);
+
+                if (status === "completed") {
+                  const transcript: string = s.transcript || "";
+                  console.log("\n🎉 Transcription complete!");
+                  console.log("-".repeat(60));
+                  console.log(transcript);
+                  console.log("-".repeat(60));
+                  return;
+                }
+
+                if (status === "failed") {
+                  console.error("\n❌ Transcription failed.");
+                  console.error("Error:", s.transcript || "");
+                  process.exit(1);
+                }
+              }
+            } catch (e: any) {
+              console.log(`  Polling error: ${e?.message || e}`);
+            }
+
+            if (Date.now() - start >= MAX_WAIT_MS) {
+              console.error("\n⏰ Polling timed out.");
+              process.exit(1);
+            }
+
+            await wait(POLL_INTERVAL_MS);
+          }
+        })().catch((e) => {
+          console.error(e.message || e);
+          process.exit(1);
+        });
+
+        ```
+        </CodeGroup>
+
+
+  </Accordion>
+</AccordionGroup>
+
+
+
 

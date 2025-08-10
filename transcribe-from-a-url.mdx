@@ -8,88 +8,123 @@ icon: "link"
 
 Your API key is used to authenticate your requests. Follow this link to grab your first API key.
 
-### Step 2: Prepare your first transcription
+### Step 2: Install the SDK
+
+```python
+pip install fennec-asr
+```
 
 Let's write a simple script to send a URL to the API.
 
+### Step 3: Transcribe!
+
+```python
+from fennec_asr import FennecASRClient
+print(FennecASRClient(api_key="YOUR_API_KEY").transcribe_url("https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"))
+```
+Don't want to use the SDK? See the example code below:
+
 <AccordionGroup>
 
-  <Accordion icon="language" title="2. Create the Python script">
-    Create a new file named `quickstart-url.py`. Copy and paste the code below into it.
+  <Accordion icon="language" title="Example Code">
+    <CodeGroup dropdown>
+      ```python quickstart.py
+        import requests
+        import json
+        import time
 
-    ```python quickstart-url.py
-import requests
-import json
-import time
+        BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+        API_KEY = "YOUR_API_KEY_HERE"
+        AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
+        POLL_INTERVAL_SECONDS = 3
+        MAX_WAIT_SECONDS = 300
 
-BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
-API_KEY = "YOUR_API_KEY_HERE"
-AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
-POLL_INTERVAL_SECONDS = 3
-MAX_WAIT_SECONDS = 300
+        headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+        payload = {"audio": AUDIO_URL, "context": "testing with a python script"}
 
-headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
-payload = {"audio": AUDIO_URL, "context": "testing with a python script"}
+        def transcribe_audio_url():
+        try:
+            # 1. Submit the job
+            print("Submitting transcription job...")
+            submit_response = requests.post(f"{BASE_URL}/transcribe/url", headers=headers, data=json.dumps(payload))
+            submit_response.raise_for_status()
+            job_info = submit_response.json()
+            job_id = job_info.get("job_id")
+            print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
 
-def transcribe_audio_url():
-    try:
-        # 1. Submit the job
-        print("Submitting transcription job...")
-        submit_response = requests.post(f"{BASE_URL}/transcribe/url", headers=headers, data=json.dumps(payload))
-        submit_response.raise_for_status()
-        job_info = submit_response.json()
-        job_id = job_info.get("job_id")
-        print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+            # 2. Poll for the result
+            start_time = time.time()
+            while time.time() - start_time < MAX_WAIT_SECONDS:
+                print("Polling for status...")
+                status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+                status_response = requests.get(status_url, headers=headers)
 
-        # 2. Poll for the result
-        start_time = time.time()
-        while time.time() - start_time < MAX_WAIT_SECONDS:
-            print("Polling for status...")
-            status_url = f"{BASE_URL}/transcribe/status/{job_id}"
-            status_response = requests.get(status_url, headers=headers)
+                if status_response.status_code == 200:
+                    status_data = status_response.json()
+                    job_status = status_data.get("status")
+                    print(f"  Current status: '{job_status}'")
 
-            if status_response.status_code == 200:
-                status_data = status_response.json()
-                job_status = status_data.get("status")
-                print(f"  Current status: '{job_status}'")
+                    if job_status == "completed":
+                        print("\n🎉 Transcription complete!")
+                        print("Transcript:", status_data.get("transcript"))
+                        break
+                    elif job_status == "failed":
+                        print("\n❌ Transcription failed.")
+                        print("Error:", status_data.get("transcript"))  # Assuming error is stored in transcript field
+                        break
+                else:
+                    print(f"  Error polling status: {status_response.status_code}")
 
-                if job_status == "completed":
-                    print("\n🎉 Transcription complete!")
-                    print("Transcript:", status_data.get("transcript"))
-                    break
-                elif job_status == "failed":
-                    print("\n❌ Transcription failed.")
-                    print("Error:", status_data.get("transcript"))  # Assuming error is stored in transcript field
-                    break
+                time.sleep(POLL_INTERVAL_SECONDS)
             else:
-                print(f"  Error polling status: {status_response.status_code}")
+                print("\n⏰ Polling timed out.")
 
-            time.sleep(POLL_INTERVAL_SECONDS)
-        else:
-            print("\n⏰ Polling timed out.")
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred: {e}")
 
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred: {e}")
+        # --- Run the script ---
+        if __name__ == "__main__":
+            transcribe_audio_url()
+      ```
+      ``` ts quickstart.ts
+        #!/usr/bin/env node
+        "use strict";
 
-# --- Run the script ---
-if __name__ == "__main__":
-    transcribe_audio_url()
+        const BASE = "https://asr-api-hso0.onrender.com/api/v1";
+        const KEY = process.env.ASR_API_KEY;
+        const AUDIO = process.argv[2] || "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg";
+        const INTERVAL = 3000, MAX = 300000;
+        const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
-    ```
+        (async () => {
+          if (!KEY) throw new Error("Set ASR_API_KEY");
+
+          const submit = await fetch(`${BASE}/transcribe/url`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-API-Key": KEY },
+            body: JSON.stringify({ audio: AUDIO, context: "testing with a node script" }),
+          });
+          if (!submit.ok) throw new Error(`Submit ${submit.status}: ${await submit.text()}`);
+          const { job_id } = await submit.json();
+          if (!job_id) throw new Error("No job_id");
+
+          const start = Date.now();
+          for (;;) {
+            const res = await fetch(`${BASE}/transcribe/status/${job_id}`, { headers: { "X-API-Key": KEY } });
+            if (!res.ok) throw new Error(`Status ${res.status}: ${await res.text()}`);
+            const s = await res.json();
+
+            if (s.status === "completed") return void console.log(s.transcript || "");
+            if (s.status === "failed") { console.error("Failed:", s.transcript || ""); process.exit(1); }
+            if (Date.now() - start > MAX) { console.error("Timed out."); process.exit(1); }
+            await wait(INTERVAL);
+          }
+        })().catch(e => { console.error(e.message || e); process.exit(1); });
+
+      ```
+   </CodeGroup>
   </Accordion>
 </AccordionGroup>
-
-### Step 3: Run it
-
-<Accordion icon="rocket" title="Run the script">
-  1.  Open your terminal in the directory containing `quickstart.py` and `sample.mp3`.
-  2.  Run the script:
-        ```bash
-        python quickstart-url.py
-        ```
-  3.  Watch as the script polls for the status and finally prints your transcript!
-
-</Accordion>
 
 ## Next Steps
 

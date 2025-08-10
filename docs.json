@@ -24,7 +24,8 @@
             "group": "Features",
             "pages": [
               "essentials/contextual-correction",
-              "essentials/formatting"
+              "essentials/formatting",
+              "essentials/diarization"
 
             ]
           },
@@ -44,8 +45,8 @@
             "group": "API documentation",
             "pages": [
               "api-reference/create-transcription-job",
-              "api-reference/endpoint/create-transcription-job-from-url",
-              "api-reference/endpoint/get-transcription-status"
+              "api-reference/create-transcription-job-from-url",
+              "api-reference/get-transcription-status"
             ]
           }
         ]

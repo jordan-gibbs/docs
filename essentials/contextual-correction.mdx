@@ -28,199 +28,21 @@ This feature is controlled by two parameters you send in your `/transcribe` requ
 
 Using the feature is as simple as adding two fields to your `multipart/form-data` request.
 
-### 1. Define your context and enable the flag
-
-In your Python script, create a string containing your contextual hints and set a boolean flag to `True`.
+### Python SDK Example
 
 ```python
-# Provide hints to the AI to recognize proprietary or uncommon words, all in natural language.
-# You can also use this to change some simpler forms of formatting as well, such as capitalization or depluralization.
-context_string = "The company they are talking about is called Bartholomew Bros, correct any potential misinterpretations in the script."
+from fennec_asr import FennecASRClient
 
-# A flag to enable the AI correction pass.
-apply_correction_flag = True
+asr_client = FennecASRClient(api_key="YOUR_API_KEY")
+
+transcription = asr_client.transcribe_file(
+    file_path="bartholomew.mp3",
+    context="The company they are talking about is called Bartholomew Bros, correct any potential misinterpretations in the script.",
+    apply_contextual_correction=True
+)
+
+print(transcription)
 ```
-
-### Add the parameters to your request
-Include context and apply_contextual_correction in the data part of your requests.post call.
-
-```python A Full Example (quickstart_context.py)
-import os
-import time
-import requests
-import json
-
-BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
-API_KEY = "YOUR_API_KEY_HERE"
-AUDIO_PATH = "sample.mp3"
-POLL_INTERVAL_S = 3
-
-context_string = "The company they are talking about is called Bartholomew Bros, correct any potential misinterpretations in the script."
-
-apply_correction_flag = True
-def transcribe_with_context():
-    headers = {"X-API-Key": API_KEY}
-    with open(AUDIO_PATH, "rb") as audio_file:
-        # 3. Prepare the request data.
-        files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
-        form_data = {
-            "context": context_string,
-            "apply_contextual_correction": apply_correction_flag
-        }
-
-        print("--- Submitting Transcription with Contextual Correction ---")
-        print(f"Applying Correction: {apply_correction_flag}")
-        print(f"Context: '{context_string}'")
-        print("---------------------------------------------------------")
-
-        try:
-            submit_response = requests.post(
-                f"{BASE_URL}/transcribe",
-                headers=headers,
-                files=files,
-                data=form_data # <-- Add the context and flag here
-            )
-            submit_response.raise_for_status()
-            job_id = submit_response.json().get("job_id")
-            print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
-
-            # Polling logic remains the same...
-            status_url = f"{BASE_URL}/transcribe/status/{job_id}"
-            while True:
-                status_response = requests.get(status_url, headers=headers)
-                status_response.raise_for_status()
-                data = status_response.json()
-                status = data.get("status")
-
-                if status == "completed":
-                    print("\n🎉 Transcription Complete!")
-                    print("-" * 25)
-                    print(data.get("transcript"))
-                    print("-" * 25)
-                    break
-                elif status == "failed":
-                    print("\n❌ Transcription failed. Error:", data.get("transcript"))
-                    break
-                else:
-                    print(f"  Current status: '{status}'... waiting.")
-                    time.sleep(POLL_INTERVAL_S)
-
-        except requests.exceptions.RequestException as e:
-            print(f"An error occurred: {e}")
-
-if __name__ == "__main__":
-    transcribe_with_context()
-```
-
-<AccordionGroup>
-  <Accordion icon="link" title="URL Example">
-
-    ```python URL Sample Script (quickstart_context_url.py)
-    import time
-    import json
-    import requests
-
-    BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
-    API_KEY = "YOUR_API_KEY_HERE"  # <-- put your API key here
-    AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
-
-    CONTEXT_STRING = "The city being referred to is Corpus Christi. Make sure any potential confusions are corrected."
-    APPLY_CORRECTION_FLAG = True  # set to False to disable
-
-    # Polling
-    POLL_INTERVAL_SECONDS = 3
-    MAX_WAIT_SECONDS = 300
-
-    def submit_job():
-        headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
-        payload = {
-            "audio": AUDIO_URL,
-            "context": CONTEXT_STRING,
-            "apply_contextual_correction": APPLY_CORRECTION_FLAG,
-        }
-
-        print("--- Submitting URL Transcription with Contextual Correction ---")
-        print(f"Audio URL: {AUDIO_URL}")
-        print(f"Applying Correction: {APPLY_CORRECTION_FLAG}")
-        print(f"Context: '{CONTEXT_STRING}'")
-        print("---------------------------------------------------------------")
-
-        resp = requests.post(f"{BASE_URL}/transcribe/url",
-                             headers=headers,
-                             data=json.dumps(payload),
-                             timeout=60)
-        resp.raise_for_status()
-        job_id = resp.json().get("job_id")
-        if not job_id:
-            raise RuntimeError("No job_id returned from submit endpoint.")
-        print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
-        return job_id
-
-
-    def poll_job(job_id):
-        headers = {"X-API-Key": API_KEY}
-        status_url = f"{BASE_URL}/transcribe/status/{job_id}"
-
-        start = time.monotonic()
-        while time.monotonic() - start < MAX_WAIT_SECONDS:
-            print("Polling for status...")
-            try:
-                resp = requests.get(status_url, headers=headers, timeout=30)
-                if resp.status_code != 200:
-                    print(f"  Error polling status: HTTP {resp.status_code}")
-                    time.sleep(POLL_INTERVAL_SECONDS)
-                    continue
-
-                data = resp.json()
-                status = data.get("status")
-                print(f"  Current status: '{status}'")
-
-                if status == "completed":
-                    return data
-                if status == "failed":
-                    return data
-            except requests.exceptions.RequestException as e:
-                print(f"  Polling error: {e}")
-
-            time.sleep(POLL_INTERVAL_SECONDS)
-
-        return {"status": "timeout", "transcript": None}
-
-
-    def main():
-        try:
-            job_id = submit_job()
-            result = poll_job(job_id)
-
-            status = result.get("status")
-            if status == "completed":
-                transcript = result.get("transcript") or ""
-                print("\n🎉 Transcription complete!")
-                print("-" * 60)
-                print(transcript)
-                print("-" * 60)
-                if SAVE_TO:
-                    with open(SAVE_TO, "w", encoding="utf-8") as f:
-                        f.write(transcript)
-                    print(f"💾 Transcript saved to: {SAVE_TO}")
-            elif status == "failed":
-                print("\n❌ Transcription failed.")
-                print("Error:", result.get("transcript"))
-            else:
-                print("\n⏰ Polling timed out.")
-        except requests.exceptions.RequestException as e:
-            print(f"An error occurred: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-
-    if __name__ == "__main__":
-        main()
-```
-
-
-  </Accordion>
-</AccordionGroup>
 
 ### Example Result
 
@@ -254,9 +76,16 @@ This feature is also very useful for dynamic formatting work and subtle adjustme
 
     **Transcript:**
     ```text
-The Fennec fox is a small fox native to the deserts of North Africa, ranging from Western Sahara and Mauritania to the Sinai Peninsula. Its most distinctive feature is its unusually large ears, which serve to dissipate heat and listen for underground prey. The fennec is the smallest fox species. Its coat, ears, and kidney functions have adapted to the desert environment with high temperatures and little water.
-
-The Fennec fox mainly eats insects, small mammals, and birds. It has a lifespan of up to fourteen years in captivity and about ten years in the wild. Pups are preyed upon by the pharaoh eagle owl. Both adults and pups may possibly fall prey to jackals and striped hyenas. Fennec families dig out burrows in the sand for habitation and protection, which can be as large as 120 meters squared, and adjoin the burrows of other families. Precise population figures are not known, but are estimated from the frequency of sightings. These indicate that the fennec fox is currently not threatened by extinction. Knowledge of social interactions is limited to information gathered from captive animals. The fennec fox is commonly trapped for exhibition or sale in North Africa, and it is considered an exotic pet in some parts of the world.
+The Fennec fox is a small fox native to the deserts of North Africa, ranging from Western Sahara and Mauritania to the Sinai Peninsula.
+Its most distinctive feature is its unusually large ears, which serve to dissipate heat and listen for underground prey.
+The fennec is the smallest fox species. Its coat, ears, and kidney functions have adapted to the desert environment with high temperatures and little water.
+The Fennec fox mainly eats insects, small mammals, and birds. It has a lifespan of up to fourteen years in captivity and about ten years in the wild.
+Pups are preyed upon by the pharaoh eagle owl. Both adults and pups may possibly fall prey to jackals and striped hyenas.
+Fennec families dig out burrows in the sand for habitation and protection, which can be as large as 120 meters squared, and adjoin the burrows of other families.
+Precise population figures are not known, but are estimated from the frequency of sightings.
+These indicate that the fennec fox is currently not threatened by extinction.
+Knowledge of social interactions is limited to information gathered from captive animals.
+The fennec fox is commonly trapped for exhibition or sale in North Africa, and it is considered an exotic pet in some parts of the world.
     ```
   </Card>
   <Card title="After Contextual Adjustment" icon="circle-check">
@@ -264,13 +93,312 @@ The Fennec fox mainly eats insects, small mammals, and birds. It has a lifespan 
 
     **Transcript:**
     ```text
-The fennec fox is a small fox native to the deserts of north africa, ranging from western sahara and mauritania to the sinai peninsula. Its most distinctive feature is its unusually large ears, which serve to dissipate heat and listen for underground prey. The fennec is the smallest fox species. Its coat, ears, and kidney functions have adapted to the desert environment with high temperatures and little water.
-
-The fennec fox mainly eats insects, small mammals, and birds. It has a lifespan of up to fourteen years in captivity and about ten years in the wild. pups are preyed upon by the pharaoh eagle owl. Both adults and pups may possibly fall prey to jackals and striped hyenas. fennec families dig out burrows in the sand for habitation and protection, which can be as large as 120 meters squared, and adjoin the burrows of other families. Precise population figures are not known, but are estimated from the frequency of sightings. These indicate that the fennec fox is currently not threatened by extinction. Knowledge of social interactions is limited to information gathered from captive animals. The fennec fox is commonly trapped for exhibition or sale in north africa, and it is considered an exotic pet in some parts of the world.
+The fennec fox is a small fox native to the deserts of north africa, ranging from western sahara and mauritania to the sinai peninsula.
+Its most distinctive feature is its unusually large ears, which serve to dissipate heat and listen for underground prey.
+The fennec is the smallest fox species. Its coat, ears, and kidney functions have adapted to the desert environment with high temperatures and little water.
+The fennec fox mainly eats insects, small mammals, and birds. It has a lifespan of up to fourteen years in captivity and about ten years in the wild.
+pups are preyed upon by the pharaoh eagle owl. Both adults and pups may possibly fall prey to jackals and striped hyenas.
+fennec families dig out burrows in the sand for habitation and protection, which can be as large as 120 meters squared, and adjoin the burrows of other families.
+Precise population figures are not known, but are estimated from the frequency of sightings.
+These indicate that the fennec fox is currently not threatened by extinction.
+Knowledge of social interactions is limited to information gathered from captive animals.
+The fennec fox is commonly trapped for exhibition or sale in north africa, and it is considered an exotic pet in some parts of the world.
     ```
   </Card>
 
 </CardGroup>
+
+<Accordion icon="language" title="Code Samples">
+
+    ### Add the parameters to your request
+    Include context and apply_contextual_correction in the data part of your call.
+
+    <CodeGroup dropdown>
+    ```python A Full Example (quickstart_context.py)
+    import os
+    import time
+    import requests
+    import json
+
+    BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+    API_KEY = "YOUR_API_KEY_HERE"
+    AUDIO_PATH = "sample.mp3"
+    POLL_INTERVAL_S = 3
+
+    context_string = "The company they are talking about is called Bartholomew Bros, correct any potential misinterpretations in the script."
+
+    apply_correction_flag = True
+    def transcribe_with_context():
+        headers = {"X-API-Key": API_KEY}
+        with open(AUDIO_PATH, "rb") as audio_file:
+            # 3. Prepare the request data.
+            files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
+            form_data = {
+                "context": context_string,
+                "apply_contextual_correction": apply_correction_flag
+            }
+
+            print("--- Submitting Transcription with Contextual Correction ---")
+            print(f"Applying Correction: {apply_correction_flag}")
+            print(f"Context: '{context_string}'")
+            print("---------------------------------------------------------")
+
+            try:
+                submit_response = requests.post(
+                    f"{BASE_URL}/transcribe",
+                    headers=headers,
+                    files=files,
+                    data=form_data # <-- Add the context and flag here
+                )
+                submit_response.raise_for_status()
+                job_id = submit_response.json().get("job_id")
+                print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+
+                # Polling logic remains the same...
+                status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+                while True:
+                    status_response = requests.get(status_url, headers=headers)
+                    status_response.raise_for_status()
+                    data = status_response.json()
+                    status = data.get("status")
+
+                    if status == "completed":
+                        print("\n🎉 Transcription Complete!")
+                        print("-" * 25)
+                        print(data.get("transcript"))
+                        print("-" * 25)
+                        break
+                    elif status == "failed":
+                        print("\n❌ Transcription failed. Error:", data.get("transcript"))
+                        break
+                    else:
+                        print(f"  Current status: '{status}'... waiting.")
+                        time.sleep(POLL_INTERVAL_S)
+
+            except requests.exceptions.RequestException as e:
+                print(f"An error occurred: {e}")
+
+    if __name__ == "__main__":
+        transcribe_with_context()
+    ```
+    ``` ts A Full Example (quickstart_context.ts)
+    #!/usr/bin/env node
+    "use strict";
+
+    const BASE = "https://asr-api-hso0.onrender.com/api/v1";
+    const KEY = process.env.ASR_API_KEY;
+    const file = process.argv[2] || "sample.mp3";
+    const CONTEXT =
+      "The company they are talking about is called Bartholomew Bros, correct any potential misinterpretations in the script.";
+    const APPLY = true;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    (async () => {
+      if (!KEY) throw new Error("Set ASR_API_KEY");
+      const { readFile } = require("fs/promises");
+      const { basename } = require("path");
+
+      const form = new FormData();
+      form.append(
+        "audio",
+        new Blob([await readFile(file)], { type: "audio/mpeg" }),
+        basename(file)
+      );
+      form.append("context", CONTEXT);
+      form.append("apply_contextual_correction", String(APPLY));
+
+      const sub = await fetch(`${BASE}/transcribe`, {
+        method: "POST",
+        headers: { "X-API-Key": KEY },
+        body: form,
+        duplex: "half",
+      }).then((r) => r.json());
+
+      if (!sub?.job_id) throw new Error("No job_id");
+      for (;;) {
+        const s = await fetch(`${BASE}/transcribe/status/${sub.job_id}`, {
+          headers: { "X-API-Key": KEY },
+        }).then((r) => r.json());
+
+        if (s.status === "completed") return void console.log(s.transcript || "");
+        if (s.status === "failed") {
+          console.error("Failed:", s.transcript || "");
+          process.exit(1);
+        }
+        await wait(3000);
+      }
+    })().catch((e) => {
+      console.error(e.message || e);
+      process.exit(1);
+    });
+
+    ```
+    </CodeGroup>
+</Accordion>
+<AccordionGroup>
+  <Accordion icon="link" title="URL Example">
+    <CodeGroup dropdown>
+        ```python URL Sample Script (quickstart_context_url.py)
+        import time
+        import json
+        import requests
+
+        BASE_URL = "https://asr-api-hso0.onrender.com/api/v1"
+        API_KEY = "YOUR_API_KEY_HERE"  # <-- put your API key here
+        AUDIO_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg"
+
+        CONTEXT_STRING = "The city being referred to is Corpus Christi. Make sure any potential confusions are corrected."
+        APPLY_CORRECTION_FLAG = True  # set to False to disable
+
+        # Polling
+        POLL_INTERVAL_SECONDS = 3
+        MAX_WAIT_SECONDS = 300
+
+        def submit_job():
+            headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+            payload = {
+                "audio": AUDIO_URL,
+                "context": CONTEXT_STRING,
+                "apply_contextual_correction": APPLY_CORRECTION_FLAG,
+            }
+
+            print("--- Submitting URL Transcription with Contextual Correction ---")
+            print(f"Audio URL: {AUDIO_URL}")
+            print(f"Applying Correction: {APPLY_CORRECTION_FLAG}")
+            print(f"Context: '{CONTEXT_STRING}'")
+            print("---------------------------------------------------------------")
+
+            resp = requests.post(f"{BASE_URL}/transcribe/url",
+                                 headers=headers,
+                                 data=json.dumps(payload),
+                                 timeout=60)
+            resp.raise_for_status()
+            job_id = resp.json().get("job_id")
+            if not job_id:
+                raise RuntimeError("No job_id returned from submit endpoint.")
+            print(f"✅ Job submitted successfully! Job ID: {job_id}\n")
+            return job_id
+
+
+        def poll_job(job_id):
+            headers = {"X-API-Key": API_KEY}
+            status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+
+            start = time.monotonic()
+            while time.monotonic() - start < MAX_WAIT_SECONDS:
+                print("Polling for status...")
+                try:
+                    resp = requests.get(status_url, headers=headers, timeout=30)
+                    if resp.status_code != 200:
+                        print(f"  Error polling status: HTTP {resp.status_code}")
+                        time.sleep(POLL_INTERVAL_SECONDS)
+                        continue
+
+                    data = resp.json()
+                    status = data.get("status")
+                    print(f"  Current status: '{status}'")
+
+                    if status == "completed":
+                        return data
+                    if status == "failed":
+                        return data
+                except requests.exceptions.RequestException as e:
+                    print(f"  Polling error: {e}")
+
+                time.sleep(POLL_INTERVAL_SECONDS)
+
+            return {"status": "timeout", "transcript": None}
+
+
+        def main():
+            try:
+                job_id = submit_job()
+                result = poll_job(job_id)
+
+                status = result.get("status")
+                if status == "completed":
+                    transcript = result.get("transcript") or ""
+                    print("\n🎉 Transcription complete!")
+                    print("-" * 60)
+                    print(transcript)
+                    print("-" * 60)
+                    if SAVE_TO:
+                        with open(SAVE_TO, "w", encoding="utf-8") as f:
+                            f.write(transcript)
+                        print(f"💾 Transcript saved to: {SAVE_TO}")
+                elif status == "failed":
+                    print("\n❌ Transcription failed.")
+                    print("Error:", result.get("transcript"))
+                else:
+                    print("\n⏰ Polling timed out.")
+            except requests.exceptions.RequestException as e:
+                print(f"An error occurred: {e}")
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+
+
+        if __name__ == "__main__":
+            main()
+        ```
+        ``` ts URL Sample Script (quickstart_context_url.ts)
+        #!/usr/bin/env node
+        "use strict";
+
+        const BASE = "https://asr-api-hso0.onrender.com/api/v1";
+        const KEY = process.env.ASR_API_KEY;
+        const url =
+          process.argv[2] ||
+          "https://upload.wikimedia.org/wikipedia/commons/3/3f/En-History_of_Corpus_Christi%2C_Texas.ogg";
+
+        const CONTEXT =
+          "The city being referred to is Corpus Christi. Make sure any potential confusions are corrected.";
+        const APPLY = true; // set to false to disable
+        const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+        (async () => {
+          if (!KEY) throw new Error("Set ASR_API_KEY");
+
+          const payload = {
+            audio: url,
+            context: CONTEXT,
+            apply_contextual_correction: APPLY,
+          };
+
+          const sub = await fetch(`${BASE}/transcribe/url`, {
+            method: "POST",
+            headers: {
+              "X-API-Key": KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          }).then((r) => r.json());
+
+          if (!sub?.job_id) throw new Error("No job_id");
+
+          for (;;) {
+            const s = await fetch(`${BASE}/transcribe/status/${sub.job_id}`, {
+              headers: { "X-API-Key": KEY },
+            }).then((r) => r.json());
+
+            if (s.status === "completed") return void console.log(s.transcript || "");
+            if (s.status === "failed") {
+              console.error("Failed:", s.transcript || "");
+              process.exit(1);
+            }
+            await wait(3000);
+          }
+        })().catch((e) => {
+          console.error(e.message || e);
+          process.exit(1);
+        });
+
+        ```
+
+    </CodeGroup>
+  </Accordion>
+</AccordionGroup>
+
+
 
 
 ## Tips for Writing Effective Context
