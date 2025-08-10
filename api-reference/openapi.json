@@ -1,9 +1,10 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Fennec ASR",
+    "title": "Fennec ASR API",
     "version": "0.1.0"
   },
+  "servers": [{ "url": "https://api.fennec-asr.com" }],
   "paths": {
     "/api/v1/transcribe/url": {
       "post": {
