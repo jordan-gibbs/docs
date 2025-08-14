@@ -63,13 +63,13 @@
     "links": [
       {
         "label": "Support",
-        "href": "mailto:info@fennec-asr.com"
+        "href": "https://fennec-asr.com/contact"
       }
     ],
     "primary": {
       "type": "button",
       "label": "Dashboard",
-      "href": "https://app.fennec-asr.com"
+      "href": "https://app.fennec-asr.com/dashboard"
     }
   },
   "contextual": {
