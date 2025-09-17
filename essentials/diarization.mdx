@@ -1,5 +1,384 @@
 ---
-title: "Diarization"
-description: "Diarization (detection of two or more speakers in a transcript) is coming soon."
-icon: "comments"
+title: "Diarization (Speaker Labels)"
+description: "Automatically identify and label different speakers in your audio. Fennec can distinguish who said what and when, even assigning names with context."
+icon: "users"
 ---
+
+Diarization is the process of partitioning an audio stream into segments according to speaker identity. In simple terms, it answers the question, **"Who spoke when?"**
+
+Fennec's diarization not only separates speakers but can also use AI to assign specific names to them, transforming a raw transcript into a structured, easy-to-read dialogue.
+
+## How It Works
+
+Use these parameters in your `/transcribe` request. Supplying known speaker names helps the model map voices to real people.
+
+<ParamField path="diarize" type="boolean">
+  Set this to `true` to enable speaker diarization. The transcript will be returned with speaker labels (e.g., `[SPEAKER_00]`, `[SPEAKER_01]`).
+</ParamField>
+
+<ParamField path="speaker_recognition_context" type="string">
+  Provide a short sentence listing the speakers (e.g., "The two speakers are Marv Esserman and the host, Ally Holt"). When `diarize` is enabled, the AI uses this text plus voice cues to replace generic labels like `[SPEAKER_00]` with the actual names.
+</ParamField>
+
+<Note>
+  <strong>Formatting & Performance:</strong> Enabling diarization increases processing time and cost. The `formatting` parameter is ignored when `diarize` is `true` because diarization dictates the output format.
+</Note>
+
+## How to Use It
+
+Adding `diarize` and (optionally) `speaker_recognition_context` is all you need.
+
+### Python SDK Example
+
+```python quickstart_sdk.py
+from fennec_asr import FennecASRClient
+
+asr_client = FennecASRClient(api_key="YOUR_API_KEY")
+
+transcription = asr_client.transcribe_file(
+    file_path="interview_session.mp3",
+    diarize=True,
+    speaker_recognition_context="The two speakers are Marv Esserman, the guest, and the host, Ally Holt."
+)
+
+print(transcription)
+```
+
+### Example Result
+
+Without diarization, a conversation is a wall of text. With diarization and speaker context, it becomes a readable script.
+
+<Columns cols={1}>
+  <Card title="Before Diarization" icon="align-left">
+
+**Transcript:**
+
+```text
+What's up, everybody, and welcome to the podcast. Today, we've got a great show, because we'll be sitting down with Marv Esserman, the mastermind behind the new hit single Decorations. Marv, first off, congrats on the success of Decorations. That track's been everywhere lately. What inspired it? Thanks, Allie. It actually came from a pretty raw place. I was staring at these old holiday lights I never took down, and it just hit me. They were like metaphors for all the stuff I never let go of. So the song kind of wrote itself after that. That's wild. And the bridge in the song? Pure emotion? You layer this subtle synth hum beneath the vocals that feels like... like a memory almost. Yeah, that hum is a field recording of my childhood homes heater. I wanted the song to feel like nostalgia, not just talk about it. That's art. You've got listeners crying in their cars and they don't even know why. What can we expect next? I'm going darker next. More stripped down, less perfection, more feeling. It's about chasing the ghosts in your own house, you know. You heard it here first, folks? Marv is just getting started. Until next time, stay curious and keep listening.
+```
+
+  </Card>
+
+  <Card title="After Diarization (diarize=true)" icon="users">
+
+**Transcript:**
+
+```text
+[SPEAKER_00]: What's up, everybody, and welcome to the podcast. Today, we've got a great show, because we'll be sitting down with Marv Esserman, the mastermind behind the new hit single Decorations. Marv, first off, congrats on the success of Decorations. That track's been everywhere lately. What inspired it?
+[SPEAKER_01]: Thanks, Allie. It actually came from a pretty raw place. I was staring at these old holiday lights I never took down, and it just hit me. They were like metaphors for all the stuff I never let go of. So the song kind of wrote itself after that.
+[SPEAKER_00]: That's wild. And the bridge in the song? Pure emotion? You layer this subtle synth hum beneath the vocals that feels like... like a memory almost.
+[SPEAKER_01]: Yeah, that hum is a field recording of my childhood homes heater. I wanted the song to feel like nostalgia, not just talk about it.
+[SPEAKER_00]: That's art. You've got listeners crying in their cars and they don't even know why. What can we expect next?
+[SPEAKER_01]: I'm going darker next. More stripped down, less perfection, more feeling. It's about chasing the ghosts in your own house, you know.
+[SPEAKER_00]: You heard it here first, folks? Marv is just getting started. Until next time, stay curious and keep listening.
+```
+
+  </Card>
+
+  <Card title="After Diarization with Speaker Context" icon="user-check">
+
+**Context Provided:** `The two speakers are Marv Esserman, the guest, and the host, Ally Holt.`
+
+**Transcript:**
+
+```text
+[Ally Holt]: What's up, everybody, and welcome to the podcast. Today, we've got a great show, because we'll be sitting down with Marv Esserman, the mastermind behind the new hit single Decorations. Marv, first off, congrats on the success of Decorations. That track's been everywhere lately. What inspired it?
+[Marv Esserman]: Thanks, Allie. It actually came from a pretty raw place. I was staring at these old holiday lights I never took down, and it just hit me. They were like metaphors for all the stuff I never let go of. So the song kind of wrote itself after that.
+[Ally Holt]: That's wild. And the bridge in the song? Pure emotion? You layer this subtle synth hum beneath the vocals that feels like... like a memory almost.
+[Marv Esserman]: Yeah, that hum is a field recording of my childhood homes heater. I wanted the song to feel like nostalgia, not just talk about it.
+[Ally Holt]: That's art. You've got listeners crying in their cars and they don't even know why. What can we expect next?
+[Marv Esserman]: I'm going darker next. More stripped down, less perfection, more feeling. It's about chasing the ghosts in your own house, you know.
+[Ally Holt]: You heard it here first, folks? Marv is just getting started. Until next time, stay curious and keep listening.
+```
+
+  </Card>
+</Columns>
+
+<AccordionGroup>
+  <Accordion title="Code Samples">
+
+**Add the parameters to your request** — include `diarize` and `speaker_recognition_context` in the form/body.
+
+<CodeGroup dropdown>
+
+```python quickstart_diarize.py
+import os
+import time
+import requests
+
+BASE_URL = "https://api.fennec-asr.com/api/v1"
+API_KEY = "YOUR_API_KEY_HERE"
+AUDIO_PATH = "sample.mp3"
+POLL_INTERVAL_S = 3
+
+speaker_context = "The two speakers are Marv Esserman and the host, Ally Holt"
+enable_diarization = True
+
+def transcribe_with_diarization():
+    headers = {"X-API-Key": API_KEY}
+    with open(AUDIO_PATH, "rb") as audio_file:
+        files = {"audio": (os.path.basename(AUDIO_PATH), audio_file, "audio/mpeg")}
+        form_data = {
+            "diarize": enable_diarization,
+            "speaker_recognition_context": speaker_context,
+        }
+
+        print("--- Submitting Transcription with Diarization ---")
+        print(f"Enable Diarization: {enable_diarization}")
+        print(f"Speaker Context: '{speaker_context}'")
+        print("-------------------------------------------------")
+
+        try:
+            submit_response = requests.post(
+                f"{BASE_URL}/transcribe",
+                headers=headers,
+                files=files,
+                data=form_data,
+                timeout=60,
+            )
+            submit_response.raise_for_status()
+            job_id = submit_response.json().get("job_id")
+            print(f"✅ Job submitted successfully! Job ID: {job_id}
+")
+
+            status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+            while True:
+                status_response = requests.get(status_url, headers=headers, timeout=30)
+                status_response.raise_for_status()
+                data = status_response.json()
+                status = data.get("status")
+
+                if status == "completed":
+                    print("
+🎉 Transcription Complete!")
+                    print("-" * 25)
+                    print(data.get("transcript"))
+                    print("-" * 25)
+                    break
+                elif status == "failed":
+                    print("
+❌ Transcription failed. Error:", data.get("transcript"))
+                    break
+                else:
+                    print(f"  Current status: '{status}'... waiting.")
+                    time.sleep(POLL_INTERVAL_S)
+
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred: {e}")
+
+if __name__ == "__main__":
+    transcribe_with_diarization()
+```
+
+```typescript quickstart_diarize.ts
+#!/usr/bin/env node
+"use strict";
+
+const BASE = "https://api.fennec-asr.com/api/v1";
+const KEY = process.env.ASR_API_KEY;
+const file = process.argv[2] || "sample.mp3";
+const SPEAKER_CONTEXT = "The two speakers are Marv Esserman and the host, Ally Holt";
+const DIARIZE = true;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+(async () => {
+  if (!KEY) throw new Error("Set ASR_API_KEY");
+  const { readFile } = await import("fs/promises");
+  const { basename } = await import("path");
+
+  const form = new FormData();
+  form.append(
+    "audio",
+    new Blob([await readFile(file)], { type: "audio/mpeg" }),
+    basename(file)
+  );
+  form.append("diarize", String(DIARIZE));
+  form.append("speaker_recognition_context", SPEAKER_CONTEXT);
+
+  const sub = await fetch(`${BASE}/transcribe`, {
+    method: "POST",
+    headers: { "X-API-Key": KEY },
+    body: form,
+    duplex: "half",
+  }).then((r) => r.json());
+
+  if (!sub?.job_id) throw new Error("No job_id");
+  for (;;) {
+    const s = await fetch(`${BASE}/transcribe/status/${sub.job_id}`, {
+      headers: { "X-API-Key": KEY },
+    }).then((r) => r.json());
+
+    if (s.status === "completed") return void console.log(s.transcript || "");
+    if (s.status === "failed") {
+      console.error("Failed:", s.transcript || "");
+      process.exit(1);
+    }
+    await wait(3000);
+  }
+})().catch((e) => {
+  console.error(e.message || e);
+  process.exit(1);
+});
+```
+
+</CodeGroup>
+
+  </Accordion>
+
+  <Accordion title="URL Example">
+
+<CodeGroup dropdown>
+
+```python quickstart_diarize_url.py
+import time
+import json
+import requests
+
+BASE_URL = "https://api.fennec-asr.com/api/v1"
+API_KEY = "YOUR_API_KEY_HERE"
+AUDIO_URL = "https://s3.amazonaws.com/static.simon.com/educator-in-chief/audio/chapter-1.mp3"
+
+SPEAKER_CONTEXT = "The main speaker is Barack Obama."
+ENABLE_DIARIZATION = True
+
+POLL_INTERVAL_SECONDS = 3
+MAX_WAIT_SECONDS = 300
+
+def submit_job():
+    headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+    payload = {
+        "audio": AUDIO_URL,
+        "diarize": ENABLE_DIARIZATION,
+        "speaker_recognition_context": SPEAKER_CONTEXT,
+    }
+
+    print("--- Submitting URL Transcription with Diarization ---")
+    print(f"Audio URL: {AUDIO_URL}")
+    print(f"Enable Diarization: {ENABLE_DIARIZATION}")
+    print(f"Speaker Context: '{SPEAKER_CONTEXT}'")
+    print("-----------------------------------------------------")
+
+    resp = requests.post(
+        f"{BASE_URL}/transcribe/url",
+        headers=headers,
+        data=json.dumps(payload),
+        timeout=60,
+    )
+    resp.raise_for_status()
+    job_id = resp.json().get("job_id")
+    if not job_id:
+        raise RuntimeError("No job_id returned from submit endpoint.")
+    print(f"✅ Job submitted successfully! Job ID: {job_id}
+")
+    return job_id
+
+
+def poll_job(job_id):
+    headers = {"X-API-Key": API_KEY}
+    status_url = f"{BASE_URL}/transcribe/status/{job_id}"
+    start = time.monotonic()
+    while time.monotonic() - start < MAX_WAIT_SECONDS:
+        print("Polling for status...")
+        try:
+            resp = requests.get(status_url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            status = data.get("status")
+            print(f"  Current status: '{status}'")
+
+            if status in ("completed", "failed"):
+                return data
+        except requests.exceptions.RequestException as e:
+            print(f"  Polling error: {e}")
+        time.sleep(POLL_INTERVAL_SECONDS)
+    return {"status": "timeout", "transcript": None}
+
+
+def main():
+    try:
+        job_id = submit_job()
+        result = poll_job(job_id)
+
+        status = result.get("status")
+        if status == "completed":
+            print("
+🎉 Transcription complete!")
+            print("-" * 60)
+            print(result.get("transcript") or "")
+            print("-" * 60)
+        elif status == "failed":
+            print("
+❌ Transcription failed. Error:", result.get("transcript"))
+        else:
+            print("
+⏰ Polling timed out.")
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+```typescript quickstart_diarize_url.ts
+#!/usr/bin/env node
+"use strict";
+
+const BASE = "https://api.fennec-asr.com/api/v1";
+const KEY = process.env.ASR_API_KEY;
+const url =
+  process.argv[2] ||
+  "https://s3.amazonaws.com/static.simon.com/educator-in-chief/audio/chapter-1.mp3";
+
+const SPEAKER_CONTEXT = "The main speaker is Barack Obama.";
+const DIARIZE = true;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+(async () => {
+  if (!KEY) throw new Error("Set ASR_API_KEY");
+
+  const payload = {
+    audio: url,
+    diarize: DIARIZE,
+    speaker_recognition_context: SPEAKER_CONTEXT,
+  };
+
+  const sub = await fetch(`${BASE}/transcribe/url`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  }).then((r) => r.json());
+
+  if (!sub?.job_id) throw new Error("No job_id");
+
+  for (;;) {
+    const s = await fetch(`${BASE}/transcribe/status/${sub.job_id}`, {
+      headers: { "X-API-Key": KEY },
+    }).then((r) => r.json());
+
+    if (s.status === "completed") return void console.log(s.transcript || "");
+    if (s.status === "failed") {
+      console.error("Failed:", s.transcript || "");
+      process.exit(1);
+    }
+    await wait(3000);
+  }
+})().catch((e) => {
+  console.error(e.message || e);
+  process.exit(1);
+});
+```
+
+</CodeGroup>
+
+  </Accordion>
+</AccordionGroup>
+
+## Tips for Writing Effective Speaker Context
+
+* **Be specific:** Provide full names and roles if possible. For example, `The interviewer is Dr. Anya Sharma, and the patient's name is Ben Carter.`
+* **List all speakers:** Try to list all known speakers to give the AI the best chance of correctly identifying everyone.
+* **Clarity is key:** The AI uses this text to make an intelligent assignment. The clearer and more descriptive your context, the more accurate the final named speaker labels will be.
