@@ -138,8 +138,7 @@ def transcribe_with_diarization():
             )
             submit_response.raise_for_status()
             job_id = submit_response.json().get("job_id")
-            print(f"✅ Job submitted successfully! Job ID: {job_id}
-")
+            print(f"✅ Job submitted successfully! Job ID: {job_id}")
 
             status_url = f"{BASE_URL}/transcribe/status/{job_id}"
             while True:
@@ -149,15 +148,13 @@ def transcribe_with_diarization():
                 status = data.get("status")
 
                 if status == "completed":
-                    print("
-🎉 Transcription Complete!")
+                    print("🎉 Transcription Complete!")
                     print("-" * 25)
                     print(data.get("transcript"))
                     print("-" * 25)
                     break
                 elif status == "failed":
-                    print("
-❌ Transcription failed. Error:", data.get("transcript"))
+                    print("❌ Transcription failed. Error:", data.get("transcript"))
                     break
                 else:
                     print(f"  Current status: '{status}'... waiting.")
@@ -238,7 +235,7 @@ BASE_URL = "https://api.fennec-asr.com/api/v1"
 API_KEY = "YOUR_API_KEY_HERE"
 AUDIO_URL = "https://ondemand.npr.org/anon.npr-mp3/npr/atc/2025/08/20250821_atc_at_83_years_old_harrison_ford_is_still_experiencing_firsts.mp3"
 
-SPEAKER_CONTEXT = "This is a conversation between Harrison Ford and Rachel Martin"
+SPEAKER_CONTEXT = "This is a conversation between Harrison Ford and Rachel Martin, Intro speaker is Juana Summers"
 ENABLE_DIARIZATION = True
 
 POLL_INTERVAL_SECONDS = 3
@@ -268,8 +265,7 @@ def submit_job():
     job_id = resp.json().get("job_id")
     if not job_id:
         raise RuntimeError("No job_id returned from submit endpoint.")
-    print(f"✅ Job submitted successfully! Job ID: {job_id}
-")
+    print(f"✅ Job submitted successfully! Job ID: {job_id}")
     return job_id
 
 
@@ -301,17 +297,14 @@ def main():
 
         status = result.get("status")
         if status == "completed":
-            print("
-🎉 Transcription complete!")
+            print("🎉 Transcription complete!")
             print("-" * 60)
             print(result.get("transcript") or "")
             print("-" * 60)
         elif status == "failed":
-            print("
-❌ Transcription failed. Error:", result.get("transcript"))
+            print("❌ Transcription failed. Error:", result.get("transcript"))
         else:
-            print("
-⏰ Polling timed out.")
+            print("⏰ Polling timed out.")
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
 
@@ -330,7 +323,7 @@ const url =
   process.argv[2] ||
   "https://ondemand.npr.org/anon.npr-mp3/npr/atc/2025/08/20250821_atc_at_83_years_old_harrison_ford_is_still_experiencing_firsts.mp3";
 
-const SPEAKER_CONTEXT = "This is a conversation between Harrison Ford and Rachel Martin";
+const SPEAKER_CONTEXT = "This is a conversation between Harrison Ford and Rachel Martin, Intro speaker is Juana Summers";
 const DIARIZE = true;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
