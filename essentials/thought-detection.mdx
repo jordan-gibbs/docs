@@ -101,9 +101,7 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
         BASE_URL = "wss://api.fennec-asr.com/api/v1/transcribe/stream"
         API_KEY = "YOUR_API_KEY"
 
-        WEBSOCKET_URL = f"{BASE_URL}?api_key={API_KEY}"
-        if ENABLE_THOUGHT_DETECTION:
-            WEBSOCKET_URL += "&detect_thoughts=true"
+        WEBSOCKET_URL = BASE_URL + ("?detect_thoughts=true" if ENABLE_THOUGHT_DETECTION else "")
 
         SAMPLE_RATE = 16_000
         CHANNELS = 1
@@ -158,7 +156,12 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
         async def main():
             print(f"Connecting to: {WEBSOCKET_URL}")
             try:
-                async with websockets.connect(WEBSOCKET_URL, max_size=None, ping_interval=5) as ws:
+                async with websockets.connect(
+                        WEBSOCKET_URL,
+                        additional_headers={"X-API-Key": API_KEY},
+                        max_size=None,
+                        ping_interval=5
+                    ) as ws:
                     await ws.send(json.dumps(START_MSG))
                     print("✅ WebSocket connected and configured.")
 
@@ -202,8 +205,8 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
           console.warn("⚠️  Using placeholder API key. Set FENNEC_API_KEY for real requests.");
         }
 
-        let WEBSOCKET_URL = `${WS_BASE}?api_key=${encodeURIComponent(API_KEY)}`;
-        if (ENABLE_THOUGHT_DETECTION) WEBSOCKET_URL += "&detect_thoughts=true";
+        let WEBSOCKET_URL = WS_BASE;
+        if (ENABLE_THOUGHT_DETECTION) WEBSOCKET_URL += "?detect_thoughts=true";
 
         // --- Audio Configuration ---
         const SAMPLE_RATE: number = 16_000;
@@ -241,6 +244,7 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
           const ws = new WebSocket(WEBSOCKET_URL, {
             perMessageDeflate: false,
             maxPayload: 0,
+            headers: { "X-API-Key": API_KEY },
           });
 
           // Graceful shutdown

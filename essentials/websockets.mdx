@@ -4,7 +4,7 @@ description: "Stream audio directly from any source and receive low-latency tran
 icon: "microphone-lines"
 ---
 
-For applications requiring immediate feedback, such as live captioning, voice commands, or AI voice agents, the WebSocket endpoint provides real-time transcription. You can stream raw audio and receive transcripts back as soon as a speaker pauses, all with sub-250 ms latency.
+For applications requiring immediate feedback, AI voice agents, the WebSocket endpoint provides real-time transcription. You can stream raw audio and receive transcripts back as soon as a speaker pauses, all with sub-250 ms latency.
 
 This endpoint's behavior is primarily controlled by Voice Activity Detection (VAD), which intelligently segments the audio stream into utterances based on speech and silence.
 
@@ -12,7 +12,7 @@ This endpoint's behavior is primarily controlled by Voice Activity Detection (VA
 
 The process is straightforward:
 
-1.  **Connect:** Establish a WebSocket connection to the `/stream` endpoint.
+1.  **Connect:** Establish a WebSocket connection to the /stream endpoint and include your API key in the X-API-Key header.
 2.  **Configure:** Send an initial JSON message containing your desired configuration, including audio format and VAD settings.
 3.  **Stream:** Send raw audio data as binary messages.
 4.  **Receive:** Listen for JSON messages from the server containing the final transcript for each utterance.
@@ -22,12 +22,13 @@ The process is straightforward:
 
 Your API key is used to authenticate your requests. Follow [this link](https://app.fennec-asr.com) to grab your first API key.
 
+Send your key in the X-API-Key header for all WebSocket connections.
 ---
 
 The following example uses your machine's microphone as the audio source.
 
 ### Install the SDK mic addon
-```python
+```bash
 pip install fennec-asr[mic]
 ```
 
@@ -92,7 +93,7 @@ if __name__ == "__main__":
         # --- API Configuration ---
         BASE_URL = "wss://api.fennec-asr.com/api/v1/transcribe/stream"
         API_KEY = "YOUR_API_KEY_HERE"
-        WEBSOCKET_URL = f"{BASE_URL}?api_key={API_KEY}"
+        WEBSOCKET_URL = BASE_URL
 
         # --- Audio Configuration ---
         SAMPLE_RATE = 16_000
@@ -157,7 +158,12 @@ if __name__ == "__main__":
             """Main function to connect and stream microphone audio."""
             print(f"Connecting to: {WEBSOCKET_URL}")
             try:
-                async with websockets.connect(WEBSOCKET_URL, max_size=None, ping_interval=5) as ws:
+                async with websockets.connect(
+                    WEBSOCKET_URL,
+                    additional_headers={"X-API-Key": API_KEY},
+                    max_size=None,
+                    ping_interval=5
+                ) as ws:
                     # Send the configuration message.
                     await ws.send(json.dumps(START_MSG))
                     print("✅ WebSocket connected. Sent VAD configuration.")
@@ -206,7 +212,7 @@ if __name__ == "__main__":
           console.error("Set FENNEC_API_KEY in your environment (or .env).");
           process.exit(1);
         }
-        const WEBSOCKET_URL = `${WS_BASE}?api_key=${encodeURIComponent(KEY)}`;
+        const WEBSOCKET_URL = WS_BASE;
 
         // --- Audio Configuration ---
         const SAMPLE_RATE: number = 16_000;
@@ -245,7 +251,8 @@ if __name__ == "__main__":
 
           const ws = new WebSocket(WEBSOCKET_URL, {
             perMessageDeflate: false,
-            maxPayload: 0, // no limit
+            maxPayload: 0,
+            headers: { "X-API-Key": KEY },  // ← add this
           });
 
           // Graceful shutdown helpers
@@ -369,11 +376,11 @@ End-of-Speech Trigger. This is the most important parameter for controlling the 
 Pre-Speech Audio Buffer. This setting captures a small amount of audio (in milliseconds) from before the VAD officially detected the start of speech. It is crucial for preventing the first syllable or word of an utterance from being cut off (e.g., ensuring "Okay, let's start" isn't transcribed as "kay, let's start").
 </ParamField>
 
-<ParamField body="vad.final_silence_s" type="integer">
+<ParamField body="vad.final_silence_s" type="float">
 Post-Utterance Silence. This specifies an extra duration of silence (in seconds) to append to the end of a finalized utterance before it's sent for transcription. This can sometimes provide the ASR model with more non-speech context, which can help in correctly punctuating the very end of a sentence, but it will directly add to the overall latency. Use with caution.
 </ParamField>
 
-Advanced Filtering and Control Parameters
+### Advanced Filtering and Control Parameters
 These parameters provide fine-grained control over what constitutes a valid utterance, helping to filter out noise and unwanted segments.
 
 <ParamField body="vad.start_trigger_ms" type="integer">
@@ -404,7 +411,7 @@ Maximum Utterance Duration. If this is set to a value greater than 0 (e.g., 1500
 Enable Debug Logging. If set to true, the server will send additional diagnostic messages along with the transcripts. This is useful for development and fine-tuning VAD settings, but should be disabled in production.
 </ParamField>
 
-VAD Configuration Examples
+### VAD Configuration Examples
 Here are three fully-configured START_MSG examples tailored for different real-world situations.
 
 <CardGroup cols={1}>
