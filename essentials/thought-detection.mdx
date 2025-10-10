@@ -1,5 +1,5 @@
 ---
-title: "Thought Detection (Experimental)"
+title: "Thought Detection"
 description: "Build smart voice agents that let your users speak freely with no unwanted interruptions."
 icon: "robot"
 ---
@@ -14,17 +14,25 @@ The **Thought Detection** feature solves this by analyzing the semantic and voca
 
 ## How It Works
 
-1.  Enable Thought Detection by adding a simple query parameter to your WebSocket URL.
+1.  Enable Thought Detection by sending a JSON start message on the WebSocket that includes `detect_thoughts: true`. You can also tune `end_thought_eagerness` and `force_complete_time` here.
 2.  As you stream audio, the server transcribes it internally but **does not** immediately send back a transcript after every pause. Instead, it buffers these transcripts and keeps them as one longer string.
 3.  Only when the model determines a thought is complete does the server send a single message of type `complete_thought` containing the full text of that idea.
 
 ### Enabling the Feature
 
-Activation is controlled by a single URL parameter.
-
-<ParamField query="detect_thoughts" type="boolean" default="false">
-  Set this to `true` in the WebSocket connection URL to enable server-side thought detection.
-</ParamField>
+**Start Message Fields**
+```json
+{
+  "type": "start",
+  "sample_rate": 16000,
+  "channels": 1,
+  "detect_thoughts": true,
+  "end_thought_eagerness": "medium",   // "low" | "medium" | "high"
+  "force_complete_time": 2.0,          // seconds, will force complete thought so users aren't stranded (min 1, max 60)
+  "context": "optional correction context string", // enables server-side transcript correction if provided
+  "vad": { "...": "unchanged VAD settings" }
+}
+```
 
 ### Install the SDK mic addon
 ```python
@@ -74,6 +82,9 @@ async def main():
     )
 
     rt._start_msg["single_utterance"] = SINGLE_UTTERANCE
+    rt._start_msg["detect_thoughts"] = True
+    rt._start_msg["end_thought_eagerness"] = "medium"   # "low" | "medium" | "high"
+    rt._start_msg["force_complete_time"] = 2.0          # 1–60 seconds
     rt._start_msg["vad"] = VAD
 
     async with rt:
@@ -82,6 +93,8 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+Don't want to use the SDK? Here are some full code samples:
 
 <Accordion icon="language" title="Code Samples">
 This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set to `true`, it automatically adjusts the WebSocket URL and the VAD settings, then listens for the specific `complete_thought` message from the server.
@@ -101,7 +114,7 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
         BASE_URL = "wss://api.fennec-asr.com/api/v1/transcribe/stream"
         API_KEY = "YOUR_API_KEY"
 
-        WEBSOCKET_URL = BASE_URL + ("?detect_thoughts=true" if ENABLE_THOUGHT_DETECTION else "")
+        WEBSOCKET_URL = BASE_URL
 
         SAMPLE_RATE = 16_000
         CHANNELS = 1
@@ -113,19 +126,24 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
             "type": "start",
             "sample_rate": 16000,
             "channels": 1,
-            "single_utterance": False,  # Keep connection open after each transcript
+            "single_utterance": False,
+            "detect_thoughts": True,
+            "end_thought_eagerness": "medium",   # "low" | "medium" | "high"
+            "force_complete_time": 2.0,          # 1–60 seconds
+            # "context": "optional correction context string",
             "vad": {
-                "threshold": 0.45,  # VAD sensitivity. Lower is more sensitive. 0.5 is a good baseline.
-                "min_silence_ms": 400,  # Milliseconds of silence to trigger an End-of-Speech event.
-                "speech_pad_ms": 200,  # Milliseconds of audio to include before speech starts.
-                "final_silence_s": 0,  # Additional silence to wait for at the end.
-                "start_trigger_ms": 30,  # How many ms of speech are needed to start transcribing.
-                "min_voiced_ms": 100,  # Utterance is discarded if it has less than this much voiced audio.
-                "min_chars": 1,  # Discard transcript if it has fewer characters than this.
-                "min_words": 1,  # Discard transcript if it has fewer words than this.
-                "amp_extend": 1200  # A non-speech noise can extend utterance, but not start it.
+                "threshold": 0.45,
+                "min_silence_ms": 400,
+                "speech_pad_ms": 200,
+                "final_silence_s": 0,
+                "start_trigger_ms": 30,
+                "min_voiced_ms": 100,
+                "min_chars": 1,
+                "min_words": 1,
+                "amp_extend": 1200
             }
         }
+
 
         shutdown_event = asyncio.Event()
 
@@ -206,7 +224,6 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
         }
 
         let WEBSOCKET_URL = WS_BASE;
-        if (ENABLE_THOUGHT_DETECTION) WEBSOCKET_URL += "?detect_thoughts=true";
 
         // --- Audio Configuration ---
         const SAMPLE_RATE: number = 16_000;
@@ -222,6 +239,10 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
           sample_rate: 16000,
           channels: 1,
           single_utterance: false,
+          detect_thoughts: true,
+          end_thought_eagerness: "medium", // "low" | "medium" | "high"
+          force_complete_time: 2.0,        // 1–60 seconds
+          // context: "optional correction context string",
           vad: {
             threshold: 0.45,
             min_silence_ms: 400,
@@ -231,9 +252,10 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
             min_voiced_ms: 100,
             min_chars: 1,
             min_words: 1,
-            amp_extend: 1200,
-          },
+            amp_extend: 1200
+          }
         };
+
 
         (async () => {
           const WebSocket = require("ws");
