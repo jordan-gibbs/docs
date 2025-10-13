@@ -18,6 +18,8 @@ The **Thought Detection** feature solves this by analyzing the semantic and voca
 2.  As you stream audio, the server transcribes it internally but **does not** immediately send back a transcript after every pause. Instead, it buffers these transcripts and keeps them as one longer string.
 3.  Only when the model determines a thought is complete does the server send a single message of type `complete_thought` containing the full text of that idea.
 
+The moment a thought is considered “complete” is tunable. Use `end_thought_eagerness` to make the detector more or less willing to close a thought, and `force_complete_time` to set a drop-dead timeout (in seconds) that will force emission of the current buffered thought after silence. This is helpful if a finished turn is incorrectly identified as an unfinished turn.
+
 ### Enabling the Feature
 
 **Start Message Fields**
@@ -33,6 +35,22 @@ The **Thought Detection** feature solves this by analyzing the semantic and voca
   "vad": { "...": "unchanged VAD settings" }
 }
 ```
+
+### Tuning When a Thought Ends
+
+These fields belong in the initial start message you send after opening the WebSocket.
+
+`end_thought_eagerness` (string, default: "medium")
+Controls how aggressively the model closes a thought.
+Allowed values: "low", "medium", "high".
+
+`force_complete_time` (number, default: 2.0)
+A drop-dead timer in seconds. If the model has not marked the current thought complete and the user has gone silent, the server will force-emit the buffered text once this many seconds have elapsed.
+Range: 1.0–60.0 seconds. Values outside this range are rejected.
+
+Note: You still enable the feature with detect_thoughts: true. These extra fields only tune when the thought ends.
+
+## Getting Started
 
 ### Install the SDK mic addon
 ```python
