@@ -14,26 +14,26 @@
         "tab": "Guides",
         "groups": [
           {
-            "group": "Quickstart",
+            "group": "Live Transcribe with Websockets",
+            "pages": [
+              "essentials/websockets",
+              "essentials/thought-detection"
+            ]
+          },
+          {
+            "group": "Batch Transcribe",
             "pages": [
               "transcribe-from-a-file",
               "transcribe-from-a-url"
             ]
           },
           {
-            "group": "Features",
+            "group": "Batch Transcribe Features",
             "pages": [
               "essentials/contextual-correction",
               "essentials/formatting",
               "essentials/diarization"
 
-            ]
-          },
-          {
-            "group": "Live Transcribe with Websockets",
-            "pages": [
-              "essentials/websockets",
-              "essentials/thought-detection"
             ]
           }
         ]

@@ -10,19 +10,30 @@ This endpoint's behavior is primarily controlled by Voice Activity Detection (VA
 
 ## How It Works
 
-The process is straightforward:
+1. **Get a streaming token (required):**
+   Make an HTTP POST to `/api/v1/transcribe/streaming-token` with your API key in the `X-API-Key` header.
+   The response is `{ "token": "<JWT>" }`. Tokens are short-lived; fetch a new one for each connection.
 
-1.  **Connect:** Establish a WebSocket connection to the /stream endpoint and include your API key in the X-API-Key header.
-2.  **Configure:** Send an initial JSON message containing your desired configuration, including audio format and VAD settings.
-3.  **Stream:** Send raw audio data as binary messages.
-4.  **Receive:** Listen for JSON messages from the server containing the final transcript for each utterance.
-5.  **Close:** Send an `eos` (end-of-stream) message to gracefully terminate the connection.
+2. **Connect:**
+   Open a WebSocket to
+   `wss://api.fennec-asr.com/api/v1/transcribe/stream?streaming_token=<JWT>`
+
+3. **Configure:**
+   Send a single JSON `{"type":"start", ...}` message (audio + VAD + optional features).
+
+4. **Stream:**
+   Send raw audio as binary messages.
+
+5. **Receive:**
+   Read JSON messages (finalized transcripts, and optionally VAD/utterance events).
+
+6. **Close:**
+   Send `{"type":"eos"}` to gracefully end the stream.
 
 ### Get your API Key
 
-Your API key is used to authenticate your requests. Follow [this link](https://app.fennec-asr.com) to grab your first API key.
+Your API key is used to grab your streaming token. Follow [this link](https://app.fennec-asr.com) to grab your first API key.
 
-Send your key in the X-API-Key header for all WebSocket connections.
 ---
 
 The following example uses your machine's microphone as the audio source.
@@ -91,9 +102,11 @@ if __name__ == "__main__":
         import websockets
 
         # --- API Configuration ---
-        BASE_URL = "wss://api.fennec-asr.com/api/v1/transcribe/stream"
-        API_KEY = "YOUR_API_KEY_HERE"
-        WEBSOCKET_URL = BASE_URL
+        # 1) Fetch a short-lived streaming token over HTTPS using your API key.
+        # 2) Use that token to authenticate the WebSocket connection via the URL query string.
+        HTTP_TOKEN_URL = "https://api.fennec-asr.com/api/v1/transcribe/streaming-token"
+        WS_BASE = "wss://api.fennec-asr.com/api/v1/transcribe/stream"
+        API_KEY = os.getenv("FENNEC_API_KEY") or "YOUR_API_KEY_HERE"
 
         # --- Audio Configuration ---
         SAMPLE_RATE = 16_000
@@ -111,17 +124,17 @@ if __name__ == "__main__":
             "channels": 1,
             "single_utterance": False,  # Keep connection open after each transcript
             "vad": {
-                "threshold": 0.5,  # VAD sensitivity. Lower is more sensitive. 0.5 is a good baseline.
-                "min_silence_ms": 100,  # Milliseconds of silence to trigger an End-of-Speech event.
-                "speech_pad_ms": 200,  # Milliseconds of audio to include before speech starts.
-                "final_silence_s": 0.1, # Additional silence to wait for at the end.
+                "threshold": 0.5,        # VAD sensitivity. Lower is more sensitive. 0.5 is a good baseline.
+                "min_silence_ms": 100,   # Milliseconds of silence to trigger an End-of-Speech event.
+                "speech_pad_ms": 200,    # Milliseconds of audio to include before speech starts.
+                "final_silence_s": 0.1,  # Additional silence to wait for at the end.
                 "start_trigger_ms": 36,  # How many ms of speech are needed to start transcribing.
-                "min_voiced_ms": 48,  # Utterance is discarded if it has less than this much voiced audio.
-                "min_chars": 1,  # Discard transcript if it has fewer characters than this.
-                "min_words": 1,  # Discard transcript if it has fewer words than this.
-                "amp_extend": 1200,  # A non-speech noise can extend utterance, but not start it.
-                "force_decode_ms": 0,  # Forces a transcription after a set amount of ms have elapsed
-                "debug": False,   # show debugging messages
+                "min_voiced_ms": 48,     # Utterance is discarded if it has less than this much voiced audio.
+                "min_chars": 1,          # Discard transcript if it has fewer characters than this.
+                "min_words": 1,          # Discard transcript if it has fewer words than this.
+                "amp_extend": 1200,      # A non-speech noise can extend utterance, but not start it.
+                "force_decode_ms": 0,    # Forces a transcription after a set amount of ms have elapsed
+                "debug": False,          # show debugging messages
             }
         }
 
@@ -131,6 +144,27 @@ if __name__ == "__main__":
         def _handle_sigint(*_):
             print("\nStopping…", flush=True)
             shutdown_event.set()
+
+        async def fetch_streaming_token() -> str:
+            """
+            Exchanges your API key for a short-lived streaming token.
+            Send the token via ?streaming_token=... in the WS URL.
+            """
+            if not API_KEY or API_KEY == "YOUR_API_KEY_HERE":
+                raise RuntimeError("Set FENNEC_API_KEY (or replace API_KEY).")
+            async with httpx.AsyncClient(timeout=10) as client:
+                # The ASR API reads your key from the X-API-Key header and returns {"token": "<jwt>"}
+                resp = await client.post(
+                    HTTP_TOKEN_URL,
+                    headers={"X-API-Key": API_KEY, "content-type": "application/json"},
+                    json={},  # body not required; header is what matters
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                token = data.get("token")
+                if not token:
+                    raise RuntimeError(f"Token endpoint returned no token: {data}")
+                return token
 
         async def audio_sender(ws, stream):
             """Reads from the mic and sends audio chunks to the WebSocket."""
@@ -150,19 +184,26 @@ if __name__ == "__main__":
         async def message_receiver(ws):
             """Listens for messages from the server and prints them."""
             async for msg in ws:
-                data = json.loads(msg)
-                if text := data.get("text"):
-                    print(text, flush=True)
+                try:
+                    data = json.loads(msg)
+                    if text := data.get("text"):
+                        print(text, flush=True)
+                except Exception:
+                    # Ignore non-JSON messages
+                    pass
 
         async def main():
             """Main function to connect and stream microphone audio."""
+            print("Fetching streaming token…")
+            token = await fetch_streaming_token()
+            WEBSOCKET_URL = f"{WS_BASE}?streaming_token={token}"
+
             print(f"Connecting to: {WEBSOCKET_URL}")
             try:
                 async with websockets.connect(
                     WEBSOCKET_URL,
-                    additional_headers={"X-API-Key": API_KEY},
                     max_size=None,
-                    ping_interval=5
+                    ping_interval=5,
                 ) as ws:
                     # Send the configuration message.
                     await ws.send(json.dumps(START_MSG))
@@ -197,8 +238,12 @@ if __name__ == "__main__":
          * Streams microphone audio to the ASR WebSocket API with VAD configuration,
          * printing finalized transcripts as they arrive. (Ctrl+C to stop)
          *
+         * Auth flow:
+         *   1) POST your API key to the HTTPS token endpoint to get a short-lived streaming token.
+         *   2) Connect to the WebSocket using ?streaming_token=... in the URL (no header needed).
+         *
          * Requires:
-         *   - Node 18+ (for fetch/Blob/FormData globals)
+         *   - Node 18+ (for global fetch)
          *   - npm i ws mic dotenv
          *   - A working system recorder (arecord/sox/CoreAudio depending on OS)
          *   - .env with FENNEC_API_KEY=your_key
@@ -206,21 +251,21 @@ if __name__ == "__main__":
 
         require("dotenv").config();
 
+        const HTTP_TOKEN_URL = "https://api.fennec-asr.com/api/v1/transcribe/streaming-token";
         const WS_BASE = "wss://api.fennec-asr.com/api/v1/transcribe/stream";
         const KEY = process.env.FENNEC_API_KEY;
         if (!KEY) {
           console.error("Set FENNEC_API_KEY in your environment (or .env).");
           process.exit(1);
         }
-        const WEBSOCKET_URL = WS_BASE;
 
         // --- Audio Configuration ---
-        const SAMPLE_RATE: number = 16_000;
-        const CHANNELS: number = 1;
-        const CHUNK_MS: number = 100;
-        const DTYPE_BYTES: number = 2; // int16 -> 2 bytes/sample
-        const FRAMES_PER_CHUNK: number = Math.floor(SAMPLE_RATE * (CHUNK_MS / 1000));
-        const CHUNK_BYTES: number = FRAMES_PER_CHUNK * CHANNELS * DTYPE_BYTES;
+        const SAMPLE_RATE = 16_000;
+        const CHANNELS = 1;
+        const CHUNK_MS = 100;
+        const DTYPE_BYTES = 2; // int16 -> 2 bytes/sample
+        const FRAMES_PER_CHUNK = Math.floor(SAMPLE_RATE * (CHUNK_MS / 1000));
+        const CHUNK_BYTES = FRAMES_PER_CHUNK * CHANNELS * DTYPE_BYTES;
 
         // --- Start Message (matches the Python example) ---
         const START_MSG = {
@@ -229,16 +274,16 @@ if __name__ == "__main__":
           channels: 1,
           single_utterance: false, // Keep connection open after each transcript
           vad: {
-            threshold: 0.5, // Lower => more sensitive
-            min_silence_ms: 100, // Silence to trigger end-of-speech
-            speech_pad_ms: 200, // Audio to include before speech starts
-            final_silence_s: 0.1, // Extra silence to wait at the end
-            start_trigger_ms: 36, // How many ms of speech to start transcribing
-            min_voiced_ms: 48, // Discard utterances with less voiced audio
+            threshold: 0.5,        // Lower => more sensitive
+            min_silence_ms: 100,   // Silence to trigger end-of-speech
+            speech_pad_ms: 200,    // Audio to include before speech starts
+            final_silence_s: 0.1,  // Extra silence to wait at the end
+            start_trigger_ms: 36,  // How many ms of speech to start transcribing
+            min_voiced_ms: 48,     // Discard utterances with less voiced audio
             min_chars: 1,
             min_words: 1,
-            amp_extend: 1200, // Non-speech noise can extend utterance, not start it
-            force_decode_ms: 0, // Force a transcription after N ms
+            amp_extend: 1200,      // Non-speech noise can extend utterance, not start it
+            force_decode_ms: 0,    // Force a transcription after N ms
             debug: false,
           },
         };
@@ -247,17 +292,38 @@ if __name__ == "__main__":
           const WebSocket = require("ws");
           const mic = require("mic");
 
+          async function fetchStreamingToken() {
+            // The ASR API reads your key from the X-API-Key header and returns { token: "<jwt>" }
+            const resp = await fetch(HTTP_TOKEN_URL, {
+              method: "POST",
+              headers: {
+                "X-API-Key": KEY,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({}), // body not required; header is what matters
+            });
+            if (!resp.ok) {
+              const text = await resp.text().catch(() => "");
+              throw new Error(`Token request failed: ${resp.status} ${text}`);
+            }
+            const data = await resp.json();
+            if (!data?.token) throw new Error("Token endpoint returned no token");
+            return data.token;
+          }
+
+          console.log("Fetching streaming token…");
+          const token = await fetchStreamingToken();
+          const WEBSOCKET_URL = `${WS_BASE}?streaming_token=${encodeURIComponent(token)}`;
           console.log(`Connecting to: ${WEBSOCKET_URL}`);
 
           const ws = new WebSocket(WEBSOCKET_URL, {
             perMessageDeflate: false,
             maxPayload: 0,
-            headers: { "X-API-Key": KEY },  // ← add this
           });
 
           // Graceful shutdown helpers
           let shuttingDown = false;
-          const shutdown = (micInstance?: any) => {
+          const shutdown = (micInstance) => {
             if (shuttingDown) return;
             shuttingDown = true;
             console.log("\nStopping…");
@@ -294,58 +360,52 @@ if __name__ == "__main__":
 
                 const micStream = micInstance.getAudioStream();
 
-                let buffer: Buffer = Buffer.alloc(0);
+                let buffer = Buffer.alloc(0);
 
                 console.log(
                   "\n🎙️  Streaming mic… speak, and pause to see the transcript. (Ctrl+C to stop)"
                 );
 
-                micStream.on("data", (chunk: Buffer) => {
+                micStream.on("data", (chunk) => {
                   // Accumulate mic bytes and send fixed-size chunks
                   buffer = Buffer.concat([buffer, chunk]);
-                  while (
-                    buffer.length >= CHUNK_BYTES &&
-                    ws.readyState === WebSocket.OPEN
-                  ) {
+                  while (buffer.length >= CHUNK_BYTES && ws.readyState === WebSocket.OPEN) {
                     const slice = buffer.subarray(0, CHUNK_BYTES);
                     ws.send(slice); // binary audio payload
                     buffer = buffer.subarray(CHUNK_BYTES);
                   }
                 });
 
-                micStream.on("error", (err: any) => {
+                micStream.on("error", (err) => {
                   console.error("Mic error:", err?.message || err);
                 });
 
-                ws.on("message", (msg: Buffer) => {
+                ws.on("message", (msg) => {
                   try {
                     const data = JSON.parse(msg.toString("utf8"));
                     if (data?.text) {
                       console.log(data.text);
                     }
-                  } catch (e: any) {
+                  } catch {
                     // Ignore non-JSON messages
                   }
                 });
 
-                ws.on("close", () => {
-                  shutdown(micInstance);
-                });
-
-                ws.on("error", (e: any) => {
+                ws.on("close", () => shutdown(micInstance));
+                ws.on("error", (e) => {
                   console.error("WebSocket error:", e?.message || e);
                   shutdown(micInstance);
                 });
 
                 micInstance.start();
-              } catch (e: any) {
+              } catch (e) {
                 console.error("Startup error:", e?.message || e);
                 shutdown();
               }
             })();
           });
 
-          ws.on("error", (e: any) => {
+          ws.on("error", (e) => {
             console.error("WebSocket error (pre-open):", e?.message || e);
           });
         })();

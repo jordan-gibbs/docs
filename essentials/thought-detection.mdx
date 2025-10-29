@@ -125,14 +125,14 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
         import signal
         import sounddevice as sd
         import websockets
+        import httpx
         import os
 
         ENABLE_THOUGHT_DETECTION = True
 
-        BASE_URL = "wss://api.fennec-asr.com/api/v1/transcribe/stream"
-        API_KEY = "YOUR_API_KEY"
-
-        WEBSOCKET_URL = BASE_URL
+        WS_BASE = "wss://api.fennec-asr.com/api/v1/transcribe/stream"
+        HTTP_TOKEN_URL = "https://api.fennec-asr.com/api/v1/transcribe/streaming-token"
+        API_KEY = os.getenv("FENNEC_API_KEY") or "YOUR_API_KEY"
 
         SAMPLE_RATE = 16_000
         CHANNELS = 1
@@ -162,7 +162,6 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
             }
         }
 
-
         shutdown_event = asyncio.Event()
 
         def _handle_sigint(*_):
@@ -177,24 +176,51 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
                 except websockets.exceptions.ConnectionClosed:
                     break
             try:
-                if not ws.closed: await ws.send('{"type":"eos"}')
+                if not ws.closed:
+                    await ws.send('{"type":"eos"}')
             except websockets.exceptions.ConnectionClosed:
                 pass
 
         async def message_receiver(ws):
             """Listens for messages and handles them based on the selected mode."""
             async for msg in ws:
-                data = json.loads(msg)
-                if data.get("type") == "complete_thought":
-                    text = data.get("text", "")
-                    print(f"\n✅ Thought Complete: {text}", flush=True)
+                try:
+                    data = json.loads(msg)
+                    if data.get("type") == "complete_thought":
+                        text = data.get("text", "")
+                        print(f"\n✅ Thought Complete: {text}", flush=True)
+                except Exception:
+                    # Ignore non-JSON messages
+                    pass
+
+        async def fetch_streaming_token() -> str:
+            """
+            Exchanges your API key for a short-lived streaming token.
+            Send the token via ?streaming_token=... in the WS URL.
+            """
+            if not API_KEY or API_KEY == "YOUR_API_KEY":
+                raise RuntimeError("Set FENNEC_API_KEY (or replace API_KEY).")
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    HTTP_TOKEN_URL,
+                    headers={"X-API-Key": API_KEY, "content-type": "application/json"},
+                    json={},  # body not required; header is what matters
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                token = data.get("token")
+                if not token:
+                    raise RuntimeError(f"Token endpoint returned no token: {data}")
+                return token
 
         async def main():
+            print("Fetching streaming token…")
+            token = await fetch_streaming_token()
+            WEBSOCKET_URL = f"{WS_BASE}?streaming_token={token}"
             print(f"Connecting to: {WEBSOCKET_URL}")
             try:
                 async with websockets.connect(
                         WEBSOCKET_URL,
-                        additional_headers={"X-API-Key": API_KEY},
                         max_size=None,
                         ping_interval=5
                     ) as ws:
@@ -234,6 +260,7 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
         const ENABLE_THOUGHT_DETECTION = true;
 
         const WS_BASE = "wss://api.fennec-asr.com/api/v1/transcribe/stream";
+        const HTTP_TOKEN_URL = "https://api.fennec-asr.com/api/v1/transcribe/streaming-token";
         // Prefer env var if available; falls back to placeholder to mirror the Python example.
         const API_KEY = process.env.FENNEC_API_KEY || "YOUR_API_KEY";
 
@@ -274,17 +301,30 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
           }
         };
 
-
         (async () => {
           const WebSocket = require("ws");
           const mic = require("mic");
 
+          // Exchange API key -> short-lived streaming token
+          const resp = await fetch(HTTP_TOKEN_URL, {
+            method: "POST",
+            headers: { "X-API-Key": API_KEY, "content-type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (!resp.ok) {
+            const text = await resp.text().catch(() => "");
+            throw new Error(`Token request failed: ${resp.status} ${text}`);
+          }
+          const data = await resp.json().catch(() => ({}));
+          const token = data?.token as string | undefined;
+          if (!token) throw new Error("Token endpoint returned no token");
+
+          WEBSOCKET_URL = `${WS_BASE}?streaming_token=${encodeURIComponent(token)}`;
           console.log(`Connecting to: ${WEBSOCKET_URL}`);
 
-          const ws = new WebSocket(WEBSOCKET_URL, {
+          const ws = new (WebSocket as any)(WEBSOCKET_URL, {
             perMessageDeflate: false,
             maxPayload: 0,
-            headers: { "X-API-Key": API_KEY },
           });
 
           // Graceful shutdown
@@ -374,6 +414,7 @@ This client script includes a simple `ENABLE_THOUGHT_DETECTION` flag. When set t
             console.error("WebSocket error (pre-open):", e?.message || e);
           });
         })();
+
 
         ```
     </CodeGroup>
